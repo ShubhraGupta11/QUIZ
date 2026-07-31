@@ -1,6 +1,16 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Normalize so it works whether VITE_API_URL is set with or without a
+// trailing slash or "/api" suffix (e.g. "https://host.com", "https://host.com/",
+// or "https://host.com/api" all resolve to the same base).
+function resolveApiBaseUrl() {
+  let url = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim();
+  url = url.replace(/\/+$/, '');
+  if (!url.endsWith('/api')) url += '/api';
+  return url;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
