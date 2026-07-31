@@ -1,0 +1,61 @@
+.step-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  background: var(--bg-alt);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 22px;
+  text-align: left;
+  box-shadow: var(--shadow-flat-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.step-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-flat);
+  border-color: var(--accent);
+}
+
+.step-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.step-card-text {
+  flex: 1;
+}
+
+.step-card-text h3 {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-body);
+}
+
+.step-card-text p {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  margin-top: 3px;
+  font-family: var(--font-mono);
+}
+
+.step-card-arrow {
+  color: var(--accent-ink);
+  font-size: 18px;
+  transition: transform 0.15s ease;
+}
+
+.step-card:hover .step-card-arrow {
+  transform: translateX(4px);
+}
