@@ -5,15 +5,19 @@ const { protect, checkRole } = require('../middleware/auth');
 
 const DEFAULT_SEMESTER_NAMES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th'];
 
-// A department may have no semesters yet if no faculty has created any manually.
-// Auto-seed the standard Semester 1-7 the first time a department is queried, so
-// students always see a full semester list at registration regardless of whether
-// faculty has touched that department yet.
+// A department may be missing some (or all) of the standard 1st-7th semesters,
+// e.g. if faculty only manually created one so far. Top up whichever of the
+// standard names are missing (without touching ones that already exist), so
+// students always see the full semester list at registration regardless of
+// how much faculty has set up in that department.
 async function ensureDefaultSemesters(department) {
-  const existing = await Semester.countDocuments({ department });
-  if (existing > 0) return;
+  const existing = await Semester.find({ department }).select('name');
+  const existingNames = new Set(existing.map((s) => s.name));
+  const missing = DEFAULT_SEMESTER_NAMES.filter((name) => !existingNames.has(name));
+  if (missing.length === 0) return;
+
   await Semester.insertMany(
-    DEFAULT_SEMESTER_NAMES.map((name, i) => ({ name, order: i + 1, department }))
+    missing.map((name) => ({ name, order: DEFAULT_SEMESTER_NAMES.indexOf(name) + 1, department }))
   );
 }
 
