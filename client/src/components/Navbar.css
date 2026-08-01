@@ -13,6 +13,21 @@
   height: 76px;
 }
 
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.navbar-back {
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1.5px solid var(--border);
+  white-space: nowrap;
+}
+
 .navbar-brand {
   display: flex;
   align-items: center;
