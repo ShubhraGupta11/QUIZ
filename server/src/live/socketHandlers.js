@@ -26,6 +26,25 @@ async function socketAuthMiddleware(socket, next) {
 function registerLiveQuizHandlers(io) {
   io.use(socketAuthMiddleware);
 
+  // Closes the current question (called on timeout, on all-answered, or on
+  // host skip) and broadcasts the correct answer + live answer-distribution
+  // chart to everyone in the room. Idempotent — safe to call once per question.
+  function closeQuestion(io, session) {
+    if (session.status !== 'question') return;
+    if (session.questionTimer) {
+      clearTimeout(session.questionTimer);
+      session.questionTimer = null;
+    }
+    session.status = 'reveal';
+
+    const question = session.questions[session.currentIndex];
+    io.to(`live:${session.code}`).emit('question:reveal', {
+      correctOptionIndex: question.correctOptionIndex,
+      distribution: manager.getAnswerDistribution(session),
+      totalPlayers: session.players.size,
+    });
+  }
+
   io.on('connection', (socket) => {
     const user = socket.data.user;
 
@@ -83,13 +102,27 @@ function registerLiveQuizHandlers(io) {
         return ack?.({ success: true, finished: true });
       }
 
-      session.status = 'active';
       io.to(`live:${code}`).emit('question:show', {
         index: session.currentIndex,
         total: session.questions.length,
         question: manager.publicQuestion(question),
       });
+
+      // Server-authoritative timer: auto-close the question when time runs out,
+      // even if the host's browser tab is unfocused or a player never answers.
+      session.questionTimer = setTimeout(() => {
+        closeQuestion(io, session);
+      }, manager.QUESTION_TIME_LIMIT_SEC * 1000);
+
       ack?.({ success: true, finished: false });
+    });
+
+    // Faculty can skip the remaining time on a question and reveal immediately
+    socket.on('host:skip', ({ code }, ack) => {
+      const session = manager.getSession(code);
+      if (!session || session.hostSocketId !== socket.id) return ack?.({ success: false, message: 'Not authorized' });
+      closeQuestion(io, session);
+      ack?.({ success: true });
     });
 
     // Student submits an answer for the current question
@@ -108,9 +141,15 @@ function registerLiveQuizHandlers(io) {
         answeredCount,
         totalPlayers: session.players.size,
       });
+
+      // Auto-close the moment every joined player has answered, instead of
+      // waiting out the full timer.
+      if (manager.allAnswered(session)) {
+        closeQuestion(io, session);
+      }
     });
 
-    // Faculty reveals the leaderboard after a question closes
+    // Faculty reveals the leaderboard after the answer-reveal screen
     socket.on('host:showLeaderboard', ({ code }, ack) => {
       const session = manager.getSession(code);
       if (!session || session.hostSocketId !== socket.id) return ack?.({ success: false, message: 'Not authorized' });

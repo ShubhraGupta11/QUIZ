@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import apiClient from "../../api/apiClient";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
 import "./Faculty.css";
+import "../../styles/liveQuiz.css";
 
 export default function LiveQuizHost() {
   const [semesters, setSemesters] = useState([]);
@@ -18,16 +19,20 @@ export default function LiveQuizHost() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [genStatus, setGenStatus] = useState("");
 
-  const [phase, setPhase] = useState("setup"); // setup -> lobby -> question -> leaderboard -> finished
+  const [phase, setPhase] = useState("setup"); // setup -> lobby -> question -> reveal -> leaderboard -> finished
   const [code, setCode] = useState("");
   const [players, setPlayers] = useState([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [revealData, setRevealData] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [finalResults, setFinalResults] = useState([]);
   const [error, setError] = useState("");
+
+  const timerRef = useRef(null);
 
   useEffect(() => {
     apiClient.get("/semesters").then((res) => setSemesters(res.data.data));
@@ -47,28 +52,48 @@ export default function LiveQuizHost() {
 
   useEffect(() => {
     socket.on("lobby:update", ({ players }) => setPlayers(players));
+
     socket.on("question:show", ({ index, total, question }) => {
       setQuestionIndex(index);
       setTotalQuestions(total);
       setCurrentQuestion(question);
       setAnsweredCount(0);
+      setRevealData(null);
+      setTimeLeft(question.timeLimitSec);
       setPhase("question");
+
+      clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+      }, 1000);
     });
+
     socket.on("host:answerReceived", ({ answeredCount }) => setAnsweredCount(answeredCount));
+
+    socket.on("question:reveal", ({ correctOptionIndex, distribution, totalPlayers }) => {
+      clearInterval(timerRef.current);
+      setRevealData({ correctOptionIndex, distribution, totalPlayers });
+      setPhase("reveal");
+    });
+
     socket.on("leaderboard:update", ({ leaderboard }) => {
       setLeaderboard(leaderboard);
       setPhase("leaderboard");
     });
+
     socket.on("quiz:finished", ({ results }) => {
       setFinalResults(results);
       setPhase("finished");
     });
+
     socket.on("live:error", ({ message }) => setError(message));
 
     return () => {
+      clearInterval(timerRef.current);
       socket.off("lobby:update");
       socket.off("question:show");
       socket.off("host:answerReceived");
+      socket.off("question:reveal");
       socket.off("leaderboard:update");
       socket.off("quiz:finished");
       socket.off("live:error");
@@ -143,6 +168,10 @@ export default function LiveQuizHost() {
       if (res.finished) setPhase("finished");
     });
   }, [socket, code]);
+
+  function skipQuestion() {
+    socket.emit("host:skip", { code });
+  }
 
   function showLeaderboard() {
     socket.emit("host:showLeaderboard", { code });
@@ -246,14 +275,14 @@ export default function LiveQuizHost() {
       )}
 
       {phase === "lobby" && (
-        <div className="faculty-panel card" style={{ textAlign: "center", padding: 40 }}>
-          <p style={{ fontSize: 14, color: "var(--muted-ink)" }}>Join Code</p>
-          <div style={{ fontSize: 56, fontWeight: 800, letterSpacing: 6 }}>{code}</div>
-          <p style={{ marginTop: 16 }}>{players.length} student{players.length === 1 ? "" : "s"} joined</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 16 }}>
-            {players.map((p, i) => <span key={i} className="badge badge-teal">{p}</span>)}
+        <div className="lq-lobby">
+          <div className="lq-pin-label">Join at your device — Game PIN</div>
+          <div className="lq-pin-code">{code}</div>
+          <p style={{ fontSize: 15 }}>{players.length} player{players.length === 1 ? "" : "s"} joined</p>
+          <div className="lq-players-grid">
+            {players.map((p, i) => <span key={i} className="lq-player-chip">{p}</span>)}
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={nextQuestion} disabled={players.length === 0}>
+          <button className="btn btn-primary" style={{ marginTop: 28 }} onClick={nextQuestion} disabled={players.length === 0}>
             Start Quiz →
           </button>
         </div>
@@ -261,17 +290,55 @@ export default function LiveQuizHost() {
 
       {phase === "question" && currentQuestion && (
         <div className="faculty-panel card" style={{ padding: 32 }}>
-          <p style={{ fontSize: 13, color: "var(--muted-ink)" }}>Question {questionIndex + 1} of {totalQuestions}</p>
-          <h2 style={{ margin: "12px 0 20px" }}>{currentQuestion.text}</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {currentQuestion.options.map((opt, i) => (
-              <div key={i} className="badge" style={{ padding: 12, fontSize: 14 }}>
-                {String.fromCharCode(65 + i)}) {opt}
-              </div>
-            ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--muted-ink)" }}>
+            <span>Question {questionIndex + 1} of {totalQuestions}</span>
+            <span>{answeredCount} / {players.length} answered</span>
           </div>
-          <p style={{ marginTop: 20 }}>{answeredCount} / {players.length} answered</p>
-          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={showLeaderboard}>
+          <div className="lq-timer-track">
+            <div
+              className={`lq-timer-fill ${timeLeft <= 5 ? "danger" : ""}`}
+              style={{ width: `${(timeLeft / currentQuestion.timeLimitSec) * 100}%` }}
+            />
+          </div>
+          <h2 className="lq-question-text">{currentQuestion.text}</h2>
+          <div className="lq-tile-grid">
+            {currentQuestion.options.map((opt, i) => {
+              const tile = currentQuestion.tiles[i];
+              return (
+                <div key={i} className="lq-tile" style={{ background: tile.color, cursor: "default" }}>
+                  <span className={`lq-tile-shape ${tile.shape}`} />
+                  {opt}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 12, marginTop: 20, justifyContent: "center" }}>
+            <button className="btn btn-outline" onClick={skipQuestion}>Skip / Reveal Now</button>
+          </div>
+        </div>
+      )}
+
+      {phase === "reveal" && currentQuestion && revealData && (
+        <div className="faculty-panel card" style={{ padding: 32 }}>
+          <div className="lq-reveal-banner correct">
+            ✅ Correct Answer: {currentQuestion.options[revealData.correctOptionIndex]}
+          </div>
+          {currentQuestion.options.map((opt, i) => {
+            const count = revealData.distribution[i] || 0;
+            const pct = revealData.totalPlayers > 0 ? Math.round((count / revealData.totalPlayers) * 100) : 0;
+            const tile = currentQuestion.tiles[i];
+            return (
+              <div className="lq-dist-row" key={i}>
+                <span className="lq-dist-label">{String.fromCharCode(65 + i)}</span>
+                <div className="lq-dist-track">
+                  <div className="lq-dist-fill" style={{ width: `${pct}%`, background: tile.color }}>
+                    {count > 0 ? `${count} (${pct}%)` : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={showLeaderboard}>
             Show Leaderboard →
           </button>
         </div>
@@ -283,7 +350,7 @@ export default function LiveQuizHost() {
           <div className="manage-list" style={{ marginTop: 16 }}>
             {leaderboard.map((p, i) => (
               <div className="manage-row" key={i}>
-                <div className="manage-row-text">#{i + 1} {p.name}</div>
+                <div className="manage-row-text">#{i + 1} {p.name} {p.streak >= 2 && <span className="lq-streak-badge" style={{ marginLeft: 8 }}>🔥 {p.streak}</span>}</div>
                 <div>{p.score} pts</div>
               </div>
             ))}
@@ -297,16 +364,41 @@ export default function LiveQuizHost() {
 
       {phase === "finished" && (
         <div className="faculty-panel card" style={{ padding: 32 }}>
-          <h3>🏆 Final Results</h3>
-          <div className="manage-list" style={{ marginTop: 16 }}>
-            {finalResults.map((p, i) => (
+          <h3 style={{ textAlign: "center" }}>🏆 Final Results</h3>
+          <div className="lq-podium">
+            {finalResults[1] && (
+              <div className="lq-podium-place silver">
+                <div className="lq-podium-name">{finalResults[1].name}</div>
+                <div className="lq-podium-score">{finalResults[1].score} pts</div>
+                <div className="lq-podium-bar">2</div>
+              </div>
+            )}
+            {finalResults[0] && (
+              <div className="lq-podium-place gold">
+                <div className="lq-podium-name">{finalResults[0].name}</div>
+                <div className="lq-podium-score">{finalResults[0].score} pts</div>
+                <div className="lq-podium-bar">1</div>
+              </div>
+            )}
+            {finalResults[2] && (
+              <div className="lq-podium-place bronze">
+                <div className="lq-podium-name">{finalResults[2].name}</div>
+                <div className="lq-podium-score">{finalResults[2].score} pts</div>
+                <div className="lq-podium-bar">3</div>
+              </div>
+            )}
+          </div>
+          <div className="manage-list lq-rest-list">
+            {finalResults.slice(3).map((p, i) => (
               <div className="manage-row" key={i}>
-                <div className="manage-row-text">#{i + 1} {p.name}</div>
+                <div className="manage-row-text">#{i + 4} {p.name}</div>
                 <div>{p.score} pts · {p.correctCount}/{p.totalQuestions} correct</div>
               </div>
             ))}
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={resetToSetup}>Host Another Session</button>
+          <div style={{ textAlign: "center" }}>
+            <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={resetToSetup}>Host Another Session</button>
+          </div>
         </div>
       )}
     </div>

@@ -1,19 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
 import "./Student.css";
+import "../../styles/liveQuiz.css";
 
 export default function LiveQuizJoin() {
   const [code, setCode] = useState("");
-  const [phase, setPhase] = useState("join"); // join -> lobby -> question -> answered -> leaderboard -> finished
+  const [phase, setPhase] = useState("join"); // join -> lobby -> question -> answered -> reveal -> leaderboard -> finished
   const [error, setError] = useState("");
   const [chapterName, setChapterName] = useState("");
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [selectedOption, setSelectedOption] = useState(null);
   const [lastResult, setLastResult] = useState(null);
+  const [revealData, setRevealData] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [finalResults, setFinalResults] = useState([]);
+
+  const timerRef = useRef(null);
 
   const socket = getLiveSocket();
 
@@ -22,34 +27,46 @@ export default function LiveQuizJoin() {
       setQuestionIndex(index);
       setTotalQuestions(total);
       setCurrentQuestion(question);
-      setTimeLeft(question.timeLimitSec);
+      setSelectedOption(null);
       setLastResult(null);
+      setRevealData(null);
+      setTimeLeft(question.timeLimitSec);
       setPhase("question");
+
+      clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+      }, 1000);
     });
+
+    socket.on("question:reveal", ({ correctOptionIndex, distribution, totalPlayers }) => {
+      clearInterval(timerRef.current);
+      setRevealData({ correctOptionIndex, distribution, totalPlayers });
+      setPhase("reveal");
+    });
+
     socket.on("leaderboard:update", ({ leaderboard }) => {
       setLeaderboard(leaderboard);
       setPhase("leaderboard");
     });
+
     socket.on("quiz:finished", ({ results }) => {
       setFinalResults(results);
       setPhase("finished");
     });
+
     socket.on("live:error", ({ message }) => setError(message));
 
     return () => {
+      clearInterval(timerRef.current);
       socket.off("question:show");
+      socket.off("question:reveal");
       socket.off("leaderboard:update");
       socket.off("quiz:finished");
       socket.off("live:error");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (phase !== "question" || timeLeft <= 0) return;
-    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [phase, timeLeft]);
 
   function joinRoom() {
     if (!code.trim()) return;
@@ -68,6 +85,8 @@ export default function LiveQuizJoin() {
   }
 
   function selectOption(optionIndex) {
+    if (selectedOption !== null) return;
+    setSelectedOption(optionIndex);
     socket.emit("player:answer", { code: code.trim(), optionIndex }, (res) => {
       setLastResult(res);
       setPhase("answered");
@@ -108,26 +127,42 @@ export default function LiveQuizJoin() {
       )}
 
       {phase === "lobby" && (
-        <div className="card" style={{ padding: 32, textAlign: "center" }}>
-          <h2>{chapterName}</h2>
+        <div className="lq-lobby">
+          <div className="lq-pin-label">You're in!</div>
+          <h2 style={{ marginTop: 8 }}>{chapterName}</h2>
           <p>{totalQuestions} questions · Waiting for host to start...</p>
         </div>
       )}
 
       {phase === "question" && currentQuestion && (
         <div className="card" style={{ padding: 32 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--ink-muted)" }}>
             <span>Question {questionIndex + 1} of {totalQuestions}</span>
-            <span className={timeLeft <= 5 ? "quiz-timer danger" : "quiz-timer"}>⏱ {timeLeft}s</span>
+            <span>⏱ {timeLeft}s</span>
           </div>
-          <h2 style={{ marginBottom: 20 }}>{currentQuestion.text}</h2>
-          <div className="option-list">
-            {currentQuestion.options.map((opt, i) => (
-              <button key={i} className="option-item" onClick={() => selectOption(i)}>
-                <span className="option-letter">{String.fromCharCode(65 + i)}</span>
-                {opt}
-              </button>
-            ))}
+          <div className="lq-timer-track">
+            <div
+              className={`lq-timer-fill ${timeLeft <= 5 ? "danger" : ""}`}
+              style={{ width: `${(timeLeft / currentQuestion.timeLimitSec) * 100}%` }}
+            />
+          </div>
+          <h2 className="lq-question-text">{currentQuestion.text}</h2>
+          <div className="lq-tile-grid">
+            {currentQuestion.options.map((opt, i) => {
+              const tile = currentQuestion.tiles[i];
+              return (
+                <button
+                  key={i}
+                  className={`lq-tile ${selectedOption === i ? "selected" : ""}`}
+                  style={{ background: tile.color }}
+                  onClick={() => selectOption(i)}
+                  disabled={selectedOption !== null}
+                >
+                  <span className={`lq-tile-shape ${tile.shape}`} />
+                  {opt}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -135,8 +170,20 @@ export default function LiveQuizJoin() {
       {phase === "answered" && lastResult && (
         <div className="card" style={{ padding: 32, textAlign: "center" }}>
           <h2>{lastResult.isCorrect ? "✅ Correct!" : "❌ Incorrect"}</h2>
-          <p style={{ fontSize: 18, marginTop: 8 }}>+{lastResult.pointsAwarded} points</p>
-          <p style={{ marginTop: 16, color: "var(--ink-muted)" }}>Waiting for the host to continue...</p>
+          <p style={{ fontSize: 20, marginTop: 8, fontWeight: 800 }}>+{lastResult.pointsAwarded} points</p>
+          {lastResult.isCorrect && lastResult.streak >= 2 && (
+            <div className="lq-streak-badge" style={{ marginTop: 12 }}>🔥 {lastResult.streak} in a row!</div>
+          )}
+          <p style={{ marginTop: 16, color: "var(--ink-muted)" }}>Waiting for other players...</p>
+        </div>
+      )}
+
+      {phase === "reveal" && currentQuestion && revealData && (
+        <div className="card" style={{ padding: 32 }}>
+          <div className={`lq-reveal-banner ${lastResult?.isCorrect ? "correct" : "incorrect"}`}>
+            Correct Answer: {currentQuestion.options[revealData.correctOptionIndex]}
+          </div>
+          <p style={{ textAlign: "center", color: "var(--ink-muted)" }}>Waiting for the host to continue...</p>
         </div>
       )}
 
@@ -157,16 +204,41 @@ export default function LiveQuizJoin() {
 
       {phase === "finished" && (
         <div className="card" style={{ padding: 32 }}>
-          <h3>🏆 Final Results</h3>
-          <div className="manage-list" style={{ marginTop: 16 }}>
-            {finalResults.map((p, i) => (
+          <h3 style={{ textAlign: "center" }}>🏆 Final Results</h3>
+          <div className="lq-podium">
+            {finalResults[1] && (
+              <div className="lq-podium-place silver">
+                <div className="lq-podium-name">{finalResults[1].name}</div>
+                <div className="lq-podium-score">{finalResults[1].score} pts</div>
+                <div className="lq-podium-bar">2</div>
+              </div>
+            )}
+            {finalResults[0] && (
+              <div className="lq-podium-place gold">
+                <div className="lq-podium-name">{finalResults[0].name}</div>
+                <div className="lq-podium-score">{finalResults[0].score} pts</div>
+                <div className="lq-podium-bar">1</div>
+              </div>
+            )}
+            {finalResults[2] && (
+              <div className="lq-podium-place bronze">
+                <div className="lq-podium-name">{finalResults[2].name}</div>
+                <div className="lq-podium-score">{finalResults[2].score} pts</div>
+                <div className="lq-podium-bar">3</div>
+              </div>
+            )}
+          </div>
+          <div className="manage-list lq-rest-list">
+            {finalResults.slice(3).map((p, i) => (
               <div className="manage-row" key={i}>
-                <div className="manage-row-text">#{i + 1} {p.name}</div>
+                <div className="manage-row-text">#{i + 4} {p.name}</div>
                 <div>{p.score} pts · {p.correctCount}/{p.totalQuestions} correct</div>
               </div>
             ))}
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={leaveQuiz}>Done</button>
+          <div style={{ textAlign: "center" }}>
+            <button className="btn btn-primary" style={{ marginTop: 24 }} onClick={leaveQuiz}>Done</button>
+          </div>
         </div>
       )}
     </div>
