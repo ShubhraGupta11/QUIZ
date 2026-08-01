@@ -124,13 +124,17 @@ router.get('/me', protect, checkRole('student'), async (req, res) => {
 
 /**
  * @route   GET /api/attempts/reports
- * @desc    Get aggregate class performance reports for faculty
- * @access  Private (Faculty only)
+ * @desc    Get aggregate class performance reports. Faculty see only their own
+ *          department(s); Admin sees every department platform-wide.
+ * @access  Private (Faculty or Admin)
  */
-router.get('/reports', protect, checkRole('faculty'), async (req, res) => {
+router.get('/reports', protect, checkRole('faculty', 'admin'), async (req, res) => {
   try {
-    // Scope reports to chapters belonging to any of this faculty's own departments
-    const ownSubjects = await Subject.find({ department: { $in: req.user.departments || [] } }).select('_id');
+    // Admins see every department; faculty are scoped to their own department(s)
+    const subjectFilter = req.user.role === 'admin'
+      ? {}
+      : { department: { $in: req.user.departments || [] } };
+    const ownSubjects = await Subject.find(subjectFilter).select('_id');
     const ownChapters = await Chapter.find({ subjectId: { $in: ownSubjects.map((s) => s._id) } }).select('_id');
 
     const attempts = await Attempt.find({ chapterId: { $in: ownChapters.map((c) => c._id) } })
@@ -202,7 +206,7 @@ router.get('/leaderboard/:chapterId', protect, async (req, res) => {
  * @desc    Per-question item analysis (accuracy, common wrong answer) for a chapter
  * @access  Private (Faculty only)
  */
-router.get('/analysis/:chapterId', protect, checkRole('faculty'), async (req, res) => {
+router.get('/analysis/:chapterId', protect, checkRole('faculty', 'admin'), async (req, res) => {
   try {
     const { chapterId } = req.params;
     const questions = await Question.find({ chapterId }).sort({ _id: 1 });
@@ -235,6 +239,29 @@ router.get('/analysis/:chapterId', protect, checkRole('faculty'), async (req, re
     });
 
     res.status(200).json({ success: true, data: analysis });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+});
+
+/**
+ * @route   GET /api/attempts/class-average/:chapterId
+ * @desc    Average score percentage across all students for a chapter
+ * @access  Private
+ */
+router.get('/class-average/:chapterId', protect, async (req, res) => {
+  try {
+    const { chapterId } = req.params;
+    const attempts = await Attempt.find({ chapterId });
+
+    if (attempts.length === 0) {
+      return res.status(200).json({ success: true, data: { averagePercent: null, attemptCount: 0 } });
+    }
+
+    const totalPercent = attempts.reduce((sum, a) => sum + (a.total > 0 ? (a.score / a.total) * 100 : 0), 0);
+    const averagePercent = Math.round(totalPercent / attempts.length);
+
+    res.status(200).json({ success: true, data: { averagePercent, attemptCount: attempts.length } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });
   }

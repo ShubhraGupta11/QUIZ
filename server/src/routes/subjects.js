@@ -16,6 +16,10 @@ router.get('/', protect, async (req, res) => {
       // Students only ever see subjects for their own department and semester
       filter.department = req.user.department;
       filter.semesterId = req.user.semesterId;
+    } else if (req.user.role === 'admin') {
+      // Admins see across every department; filters are optional narrowing
+      if (req.query.department) filter.department = req.query.department;
+      if (req.query.semesterId) filter.semesterId = req.query.semesterId;
     } else {
       // Faculty are scoped to all of their assigned departments; semester and
       // a specific department are optional narrowing filters
@@ -68,7 +72,7 @@ router.post('/', protect, checkRole('faculty'), async (req, res) => {
  * @desc    Delete a subject
  * @access  Private (Faculty only)
  */
-router.delete('/:id', protect, checkRole('faculty'), async (req, res) => {
+router.delete('/:id', protect, checkRole('faculty', 'admin'), async (req, res) => {
   try {
     const subject = await Subject.findByIdAndDelete(req.params.id);
     if (!subject) {

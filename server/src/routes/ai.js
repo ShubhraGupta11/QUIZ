@@ -452,4 +452,246 @@ In 3-4 short sentences, explain clearly why "${correctAnswer}" is the correct an
   }
 });
 
+// Split raw text into clean, reasonably-sized sentences to build content-grounded
+// fallback questions when no AI provider is available or the AI call fails.
+function extractSentences(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 40 && s.length <= 220);
+}
+
+const STOPWORDS = new Set([
+  'because', 'through', 'without', 'between', 'however', 'therefore', 'various',
+  'similar', 'include', 'includes', 'including', 'different', 'general', 'several',
+  'example', 'examples', 'system', 'systems', 'process', 'processes', 'function',
+  'functions', 'about', 'their', 'these', 'those', 'other', 'which', 'where',
+]);
+
+function pickDistinctiveWord(sentence) {
+  const words = sentence.match(/[A-Za-z][A-Za-z-]{5,}/g) || [];
+  const candidates = words.filter((w) => !STOPWORDS.has(w.toLowerCase()));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.length - a.length);
+  return candidates[0];
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Content-grounded fallback: builds fill-in-the-blank style MCQs directly from
+// the uploaded notes text (no AI needed), so questions genuinely vary with
+// whatever the student uploads instead of repeating a static template bank.
+function generateContentGroundedQuestions(text, count, difficulty) {
+  const sentences = shuffle(extractSentences(text));
+  const pool = [];
+  for (const sentence of sentences) {
+    const word = pickDistinctiveWord(sentence);
+    if (word) pool.push({ sentence, word });
+    if (pool.length >= count * 3) break;
+  }
+  if (pool.length === 0) return [];
+
+  const allWords = [...new Set(pool.map((p) => p.word))];
+  const selected = shuffle(pool).slice(0, count);
+  const diff = difficulty === 'mixed' ? 'medium' : difficulty || 'medium';
+
+  return selected.map(({ sentence, word }) => {
+    const blanked = sentence.replace(new RegExp(`\\b${word}\\b`, 'i'), '_____');
+    const distractorPool = allWords.filter((w) => w.toLowerCase() !== word.toLowerCase());
+    const distractors = shuffle(distractorPool).slice(0, 3);
+    while (distractors.length < 3) distractors.push(`Option ${distractors.length + 2}`);
+    const options = shuffle([word, ...distractors]);
+    return {
+      text: `Fill in the blank based on your notes: "${blanked}"`,
+      options,
+      correctOptionIndex: options.indexOf(word),
+      marks: 2,
+      difficulty: diff,
+    };
+  });
+}
+
+/**
+ * @route   POST /api/ai/generate-from-notes
+ * @desc    Generate a one-off practice quiz strictly from student-uploaded notes
+ *          (PDF/PPTX file or pasted text). Not saved to the shared question bank —
+ *          returned directly (with answers) for an immediate self-practice quiz.
+ * @access  Private (Student or Faculty)
+ */
+router.post('/generate-from-notes', protect, upload.single('file'), async (req, res) => {
+  try {
+    const { notesText, difficulty = 'mixed' } = req.body;
+    const requestedCount = Math.min(Math.max(parseInt(req.body.count, 10) || 10, 5), 20);
+
+    let docContext = '';
+    if (req.file) {
+      try {
+        docContext = req.file.mimetype === 'application/pdf'
+          ? await extractTextFromPDF(req.file.buffer)
+          : extractTextFromPPTX(req.file.buffer);
+      } catch (extractErr) {
+        return res.status(400).json({ success: false, message: 'Failed to read the uploaded file: ' + extractErr.message });
+      }
+    } else if (notesText && notesText.trim()) {
+      docContext = notesText.trim();
+    }
+
+    if (!docContext || docContext.trim().length < 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload a PDF/PPTX or paste at least a few sentences of notes to generate a quiz from.',
+      });
+    }
+    if (docContext.length > 50000) {
+      docContext = docContext.substring(0, 50000) + '... [content truncated]';
+    }
+
+    const prompt = `You are a strict exam question generator. Using ONLY the study notes below, generate exactly ${requestedCount} multiple choice questions that test understanding of THIS SPECIFIC material.
+Rules:
+- Every question and correct answer must be directly verifiable from the notes text. Do NOT invent facts not present in the text.
+- Spread the questions across different parts/topics of the notes so they are not repetitive.
+- Vary phrasing and question style (definitions, application, comparisons, cause/effect) instead of reusing the same sentence structure.
+- Difficulty level: ${difficulty === 'mixed' ? 'a mix of easy, medium, and hard' : difficulty}.
+
+---START NOTES---
+${docContext}
+---END NOTES---
+
+Each question object must contain:
+1. "text": the question string.
+2. "options": an array of exactly 4 strings.
+3. "correctOptionIndex": a number 0-3 for the correct option.
+4. "marks": 2.
+5. "difficulty": "easy", "medium", or "hard".
+
+Return ONLY a strict raw JSON array (no markdown fences) matching:
+[{"text": "...", "options": ["A","B","C","D"], "correctOptionIndex": 0, "marks": 2, "difficulty": "medium"}]`;
+
+    let questions = [];
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const result = await model.generateContent(prompt);
+        let cleanJson = result.response.text().trim();
+        if (cleanJson.startsWith('```')) {
+          cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+        }
+        const parsed = JSON.parse(cleanJson);
+        if (Array.isArray(parsed)) questions = parsed;
+      } catch (err) {
+        console.error('Gemini notes-quiz generation failed:', err.message);
+      }
+    }
+
+    if (questions.length === 0) {
+      try {
+        const cleanJson = await generateWithOpenRouter(prompt);
+        if (cleanJson) {
+          const parsed = JSON.parse(cleanJson);
+          if (Array.isArray(parsed)) questions = parsed;
+        }
+      } catch (err) {
+        console.error('OpenRouter notes-quiz generation failed:', err.message);
+      }
+    }
+
+    if (questions.length === 0) {
+      questions = generateContentGroundedQuestions(docContext, requestedCount, difficulty);
+    }
+
+    questions = questions.slice(0, requestedCount).map((q, i) => ({
+      id: `notes-${Date.now()}-${i}`,
+      text: q.text,
+      options: Array.isArray(q.options) && q.options.length >= 2 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+      correctOptionIndex: typeof q.correctOptionIndex === 'number' ? q.correctOptionIndex : 0,
+      marks: q.marks || 2,
+      difficulty: q.difficulty || (difficulty === 'mixed' ? 'medium' : difficulty),
+    }));
+
+    if (questions.length === 0) {
+      return res.status(422).json({
+        success: false,
+        message: 'Could not generate questions from the provided content. Try a longer or clearer document.',
+      });
+    }
+
+    res.status(200).json({ success: true, questions, count: questions.length });
+  } catch (error) {
+    console.error('Error generating quiz from notes:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+});
+
+/**
+ * @route   POST /api/faculty/chat
+ * @desc    AI doubt-solving chatbot (OpenRouter free-tier LLM). Stateless — the
+ *          client sends the recent message history each time.
+ * @access  Private (Student or Faculty)
+ */
+router.post('/chat', protect, async (req, res) => {
+  try {
+    const { messages, chapterName } = req.body;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, message: 'messages array is required' });
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return res.status(200).json({
+        success: true,
+        reply: "AI chat isn't configured yet — ask your faculty to set OPENROUTER_API_KEY on the server to enable this.",
+        fallback: true,
+      });
+    }
+
+    const systemPrompt = `You are a friendly, patient study assistant helping a student understand${chapterName ? ` "${chapterName}"` : ' their coursework'}. Keep answers clear, concise (under 150 words unless the student asks for more detail), and encouraging. If you don't know something, say so honestly instead of making it up.`;
+
+    const chatMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.slice(-10).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, 2000) })),
+    ];
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free',
+        messages: chatMessages,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('OpenRouter chat error:', response.status, errText);
+      return res.status(200).json({
+        success: true,
+        reply: "Sorry, the AI assistant is temporarily unavailable. Please try again in a moment.",
+        fallback: true,
+      });
+    }
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I couldn't come up with an answer to that.";
+
+    res.status(200).json({ success: true, reply, fallback: false });
+  } catch (error) {
+    console.error('Error in AI chat:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+});
+
 module.exports = router;

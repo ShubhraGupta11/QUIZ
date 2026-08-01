@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams, useLocation, useSearchParams } from "react-router-dom";
 import { getQuestions } from "../../api/mockData";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
@@ -12,9 +12,17 @@ export default function Quiz() {
   const { semesterId, subjectId, chapterId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const meta = location.state || {};
 
+  // Challenge-a-friend: a shared quiz link can carry ?beat=<percent>&from=<name>
+  const beatTarget = searchParams.get("beat") ? Number(searchParams.get("beat")) : null;
+  const challengedBy = searchParams.get("from") || null;
+
   const practiceMode = !!meta.practiceMode;
+  // Self-quiz: questions generated on-the-fly from student-uploaded notes.
+  // They aren't in the DB, so scoring happens locally and nothing is persisted.
+  const isSelfQuiz = !!meta.selfQuiz && Array.isArray(meta.questions);
 
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,11 +35,17 @@ export default function Quiz() {
   const [timePerQuestion, setTimePerQuestion] = useState({});
 
   useEffect(() => {
+    if (isSelfQuiz) {
+      setQuestions(meta.questions);
+      setLoading(false);
+      return;
+    }
     getQuestions(chapterId, meta.chapterName).then((data) => {
       setQuestions(data);
       setLoading(false);
     });
-  }, [chapterId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterId, isSelfQuiz]);
 
   const question = questions[current];
 
@@ -68,6 +82,14 @@ export default function Quiz() {
     setBookmarked((prev) => ({ ...prev, [question.id]: !prev[question.id] }));
   }
 
+  function readAloud() {
+    if (!("speechSynthesis" in window) || !question) return;
+    window.speechSynthesis.cancel();
+    const optionsText = question.options.map((o, i) => `Option ${String.fromCharCode(65 + i)}: ${o}.`).join(" ");
+    const utterance = new SpeechSynthesisUtterance(`${question.text}. ${optionsText}`);
+    window.speechSynthesis.speak(utterance);
+  }
+
   const [submitting, setSubmitting] = useState(false);
 
   async function finishQuiz() {
@@ -76,6 +98,45 @@ export default function Quiz() {
 
     // Map answers object to ordered array matching the questions
     const answersArray = questions.map((q) => answers[q.id] !== undefined ? answers[q.id] : null);
+
+    if (isSelfQuiz) {
+      // Score locally against the correct answers embedded in the generated questions —
+      // there's no DB-backed question bank to trust here, so no server round-trip needed.
+      let score = 0;
+      let total = 0;
+      const review = questions.map((q, i) => {
+        const studentAnswer = answersArray[i];
+        const marks = q.marks || 2;
+        const isCorrect = studentAnswer === q.correctIndex;
+        if (isCorrect) score += marks;
+        total += marks;
+        return {
+          questionText: q.text,
+          options: q.options,
+          selected: studentAnswer,
+          correctIndex: q.correctIndex,
+          isCorrect,
+          bookmarked: !!bookmarked[q.id],
+          timeTakenSec: timePerQuestion[i] ?? null,
+        };
+      });
+
+      navigate("/student/result", {
+        state: {
+          total: questions.length,
+          correct: review.filter((r) => r.isCorrect).length,
+          wrong: questions.length - review.filter((r) => r.isCorrect).length,
+          timeTakenSec,
+          review,
+          chapterName: meta.chapterName || "Your Notes",
+          subjectName: meta.subjectName || "AI Self-Quiz",
+          semesterName: meta.semesterName || "Generated from notes",
+          practiceMode: true,
+        },
+        replace: true,
+      });
+      return;
+    }
 
     try {
       const res = await apiClient.post('/attempts', {
@@ -112,6 +173,8 @@ export default function Quiz() {
           subjectId,
           chapterId,
           practiceMode,
+          beatTarget,
+          challengedBy,
         },
         replace: true,
       });
@@ -125,7 +188,20 @@ export default function Quiz() {
   if (loading) return <div className="page container"><Loader label="Preparing your quiz..." /></div>;
 
   if (questions.length === 0) {
-    return <div className="page container"><div className="empty-state card">No questions found for this chapter.</div></div>;
+    return (
+      <div className="page container">
+        <div className="empty-state card">
+          <p>No questions found for this chapter yet.</p>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 16 }}
+            onClick={() => navigate("/student/generate-quiz", { state: { chapterName: meta.chapterName, subjectName: meta.subjectName, semesterName: meta.semesterName } })}
+          >
+            ✨ Generate a quiz from your notes (AI)
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const progressPercent = ((current + 1) / questions.length) * 100;
@@ -157,15 +233,26 @@ export default function Quiz() {
         <div className="question-card card fade-in" key={question.id}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
             <h2 style={{ flex: 1 }}>{question.text}</h2>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={toggleBookmark}
-              title={bookmarked[question.id] ? "Remove bookmark" : "Bookmark this question"}
-              style={{ fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}
-            >
-              {bookmarked[question.id] ? "★" : "☆"}
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={readAloud}
+                title="Read question aloud"
+                style={{ fontSize: 18, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}
+              >
+                🔊
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={toggleBookmark}
+                title={bookmarked[question.id] ? "Remove bookmark" : "Bookmark this question"}
+                style={{ fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}
+              >
+                {bookmarked[question.id] ? "★" : "☆"}
+              </button>
+            </div>
           </div>
           <div className="option-list">
             {question.options.map((opt, i) => (

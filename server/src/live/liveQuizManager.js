@@ -156,6 +156,20 @@ function getFinalResults(session) {
     .sort((a, b) => b.score - a.score);
 }
 
+// Lightweight snapshot of every currently-running session, for Admin's
+// platform-wide "Live Sessions" monitoring view. Never exposes correct
+// answers or the host's socket id.
+function getAllSessions() {
+  return Array.from(sessions.values()).map((s) => ({
+    code: s.code,
+    chapterName: s.chapterName,
+    status: s.status,
+    playerCount: s.players.size,
+    currentQuestion: s.currentIndex + 1,
+    totalQuestions: s.questions.length,
+  }));
+}
+
 module.exports = {
   QUESTION_TIME_LIMIT_SEC,
   createSession,
@@ -170,4 +184,5 @@ module.exports = {
   getAnswerDistribution,
   getLeaderboard,
   getFinalResults,
+  getAllSessions,
 };

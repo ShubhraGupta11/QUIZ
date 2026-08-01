@@ -63,7 +63,37 @@ export default function Performance() {
     if (currentStreak >= 3) badges.push({ icon: "🔥", label: `${currentStreak}-Quiz Streak (≥70%)` });
     if (avgPercent >= 80) badges.push({ icon: "⭐", label: "80%+ Average" });
 
-    return { totalAttempts, avgPercent, bestPercent, subjectChart, trendChart, currentStreak, badges };
+    // XP & Level: every attempt earns XP proportional to its score percentage
+    const xp = attempts.reduce((sum, a) => sum + Math.round((a.correct / a.total) * 100), 0);
+    const level = Math.floor(xp / 200) + 1;
+    const xpIntoLevel = xp % 200;
+
+    // Weak-topic detector: chapters averaging below 60% accuracy, worst first
+    const chapterMap = {};
+    attempts.forEach((a) => {
+      chapterMap[a.chapterName] = chapterMap[a.chapterName] || { name: a.chapterName, subjectName: a.subjectName, correct: 0, total: 0 };
+      chapterMap[a.chapterName].correct += a.correct;
+      chapterMap[a.chapterName].total += a.total;
+    });
+    const weakTopics = Object.values(chapterMap)
+      .map((c) => ({ ...c, accuracy: Math.round((c.correct / c.total) * 100) }))
+      .filter((c) => c.accuracy < 60)
+      .sort((a, b) => a.accuracy - b.accuracy)
+      .slice(0, 3);
+
+    // Daily streak calendar: last 30 days, which ones had at least one attempt
+    const activeDays = new Set(attempts.map((a) => new Date(a.date).toDateString()));
+    const calendar = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      calendar.push({ date: d, active: activeDays.has(d.toDateString()) });
+    }
+
+    return {
+      totalAttempts, avgPercent, bestPercent, subjectChart, trendChart, currentStreak, badges,
+      xp, level, xpIntoLevel, weakTopics, calendar,
+    };
   }, [attempts]);
 
   return (
@@ -108,6 +138,47 @@ export default function Performance() {
             <div className="stat-box card">
               <div className="num">🔥 {stats.currentStreak}</div>
               <div className="label">Current Streak</div>
+            </div>
+          </div>
+
+          <div className="chart-card card">
+            <h3>Level {stats.level} <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-muted)" }}>({stats.xp} XP total)</span></h3>
+            <div style={{ height: 12, borderRadius: 999, background: "var(--paper)", border: "1px solid var(--border-soft)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(stats.xpIntoLevel / 200) * 100}%`, background: "var(--accent)", transition: "width 0.3s ease" }} />
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ink-muted)", marginTop: 6 }}>
+              {stats.xpIntoLevel} / 200 XP to Level {stats.level + 1}
+            </div>
+          </div>
+
+          {stats.weakTopics.length > 0 && (
+            <div className="chart-card card">
+              <h3>⚠️ Topics to Revise</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {stats.weakTopics.map((t) => (
+                  <div key={t.name} style={{ fontSize: 13.5, padding: "10px 14px", background: "var(--danger-soft)", borderRadius: 8, color: "var(--ink)" }}>
+                    You're weak in <strong>{t.name}</strong> ({t.subjectName}) — only {t.accuracy}% accuracy so far. Consider practicing this chapter again.
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="chart-card card">
+            <h3>Last 30 Days</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(15, 1fr)", gap: 5 }}>
+              {stats.calendar.map((d, i) => (
+                <div
+                  key={i}
+                  title={d.date.toLocaleDateString()}
+                  style={{
+                    aspectRatio: "1",
+                    borderRadius: 4,
+                    background: d.active ? "var(--accent)" : "var(--paper)",
+                    border: "1px solid var(--border-soft)",
+                  }}
+                />
+              ))}
             </div>
           </div>
 

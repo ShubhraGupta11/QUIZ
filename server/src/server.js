@@ -34,6 +34,9 @@ app.use('/api/questions', require('./routes/questions'));
 app.use('/api/attempts', require('./routes/attempts'));
 app.use('/api/faculty', require('./routes/ai')); // mount AI generation at /api/faculty
 app.use('/api/stats', require('./routes/stats'));
+app.use('/api/departments', require('./routes/departments'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/doubts', require('./routes/doubts'));
 
 // Global Error Handler
 app.use((err, req, res, next) => {

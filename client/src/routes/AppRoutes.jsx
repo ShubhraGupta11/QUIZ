@@ -21,6 +21,10 @@ const Result = lazy(() => import("../pages/student/Result"));
 const Performance = lazy(() => import("../pages/student/Performance"));
 const Leaderboard = lazy(() => import("../pages/student/Leaderboard"));
 const LiveQuizJoin = lazy(() => import("../pages/student/LiveQuizJoin"));
+const GenerateQuiz = lazy(() => import("../pages/student/GenerateQuiz"));
+const Flashcards = lazy(() => import("../pages/student/Flashcards"));
+const DoubtChat = lazy(() => import("../pages/student/DoubtChat"));
+const MyDoubts = lazy(() => import("../pages/student/MyDoubts"));
 
 const FacultyLayout = lazy(() => import("../pages/faculty/FacultyLayout"));
 const FacultyOverview = lazy(() => import("../pages/faculty/FacultyOverview"));
@@ -31,6 +35,15 @@ const ManageChapters = lazy(() => import("../pages/faculty/ManageChapters"));
 const ManageQuestions = lazy(() => import("../pages/faculty/ManageQuestions"));
 const Reports = lazy(() => import("../pages/faculty/Reports"));
 const LiveQuizHost = lazy(() => import("../pages/faculty/LiveQuizHost"));
+const StudentDoubts = lazy(() => import("../pages/faculty/StudentDoubts"));
+
+const AdminLayout = lazy(() => import("../pages/admin/AdminLayout"));
+const AdminOverview = lazy(() => import("../pages/admin/AdminOverview"));
+const AdminDepartments = lazy(() => import("../pages/admin/AdminDepartments"));
+const AdminFaculty = lazy(() => import("../pages/admin/AdminFaculty"));
+const AdminStudents = lazy(() => import("../pages/admin/AdminStudents"));
+const AdminContentTree = lazy(() => import("../pages/admin/AdminContentTree"));
+const AdminLiveSessions = lazy(() => import("../pages/admin/AdminLiveSessions"));
 
 function PageLoader() {
   return (
@@ -68,6 +81,14 @@ export default function AppRoutes() {
             element={<ProtectedRoute role="student"><Quiz /></ProtectedRoute>}
           />
           <Route
+            path="/student/generate-quiz"
+            element={<ProtectedRoute role="student"><GenerateQuiz /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/self-quiz"
+            element={<ProtectedRoute role="student"><Quiz /></ProtectedRoute>}
+          />
+          <Route
             path="/student/result"
             element={<ProtectedRoute role="student"><Result /></ProtectedRoute>}
           />
@@ -82,6 +103,18 @@ export default function AppRoutes() {
           <Route
             path="/student/live"
             element={<ProtectedRoute role="student"><LiveQuizJoin /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/flashcards"
+            element={<ProtectedRoute role="student"><Flashcards /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/ask-ai"
+            element={<ProtectedRoute role="student"><DoubtChat /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/doubts"
+            element={<ProtectedRoute role="student"><MyDoubts /></ProtectedRoute>}
           />
           {/* Public QR-scan join — no login required, guests join by name only */}
           <Route path="/join/:code" element={<LiveQuizJoin />} />
@@ -98,6 +131,20 @@ export default function AppRoutes() {
             <Route path="questions" element={<ManageQuestions />} />
             <Route path="reports" element={<Reports />} />
             <Route path="live" element={<LiveQuizHost />} />
+            <Route path="doubts" element={<StudentDoubts />} />
+          </Route>
+
+          <Route
+            path="/admin"
+            element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}
+          >
+            <Route path="overview" element={<AdminOverview />} />
+            <Route path="departments" element={<AdminDepartments />} />
+            <Route path="faculty" element={<AdminFaculty />} />
+            <Route path="students" element={<AdminStudents />} />
+            <Route path="content" element={<AdminContentTree />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="live-sessions" element={<AdminLiveSessions />} />
           </Route>
         </Routes>
       </Suspense>

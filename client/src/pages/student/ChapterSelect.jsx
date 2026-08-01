@@ -33,6 +33,12 @@ export default function ChapterSelect() {
         </div>
         <div className="page-header-side">
           <span className="badge badge-gold">{chapters.length} chapter{chapters.length === 1 ? "" : "s"}</span>
+          <button
+            className="btn btn-outline"
+            onClick={() => navigate("/student/generate-quiz", { state: { subjectName: subject?.name, semesterName: semester?.name } })}
+          >
+            ✨ Generate quiz from your notes
+          </button>
         </div>
       </div>
 
@@ -55,12 +61,20 @@ export default function ChapterSelect() {
             <StepCard
               key={ch.id}
               title={ch.name}
-              subtitle={`${ch.questionCount} question${ch.questionCount === 1 ? "" : "s"} · ${Math.ceil((ch.questionCount * 30) / 60)} min`}
+              subtitle={
+                ch.questionCount > 0
+                  ? `${ch.questionCount} question${ch.questionCount === 1 ? "" : "s"} · ${Math.ceil((ch.questionCount * 30) / 60)} min`
+                  : "No quiz yet — tap to generate one from your notes"
+              }
               icon={i + 1}
               onClick={() =>
-                navigate(`/student/${semesterId}/${subjectId}/${ch.id}/quiz`, {
-                  state: { chapterName: ch.name, subjectName: subject?.name, semesterName: semester?.name, practiceMode },
-                })
+                ch.questionCount > 0
+                  ? navigate(`/student/${semesterId}/${subjectId}/${ch.id}/quiz`, {
+                      state: { chapterName: ch.name, subjectName: subject?.name, semesterName: semester?.name, practiceMode },
+                    })
+                  : navigate("/student/generate-quiz", {
+                      state: { chapterName: ch.name, subjectName: subject?.name, semesterName: semester?.name },
+                    })
               }
             />
           ))}

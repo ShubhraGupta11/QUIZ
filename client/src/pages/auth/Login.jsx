@@ -24,7 +24,12 @@ export default function Login() {
     try {
       setError("");
       const userData = await login(form.email, form.password, role);
-      navigate(userData.role === "student" ? "/student/dashboard" : "/faculty/dashboard");
+      const dest = userData.role === "student"
+        ? "/student/dashboard"
+        : userData.role === "admin"
+        ? "/admin/overview"
+        : "/faculty/dashboard";
+      navigate(dest);
     } catch (err) {
       setError(err.message);
     }
@@ -52,7 +57,7 @@ export default function Login() {
                 <li><span className="point-check">✓</span> Personal performance trends</li>
               </ul>
             </>
-          ) : (
+          ) : role === "faculty" ? (
             <>
               <span className="eyebrow">Welcome back, Faculty</span>
               <h2>Manage your courses in one place.</h2>
@@ -67,6 +72,21 @@ export default function Login() {
                 <li><span className="point-check">✓</span> Per-question item analysis</li>
               </ul>
             </>
+          ) : (
+            <>
+              <span className="eyebrow">Welcome back, Admin</span>
+              <h2>Oversee the entire platform.</h2>
+              <p>
+                Manage departments, faculty, and students across every corner
+                of the platform, with full visibility into content and reports.
+              </p>
+              <ul className="auth-illustration-list">
+                <li><span className="point-check">✓</span> Platform-wide analytics</li>
+                <li><span className="point-check">✓</span> Faculty & student management</li>
+                <li><span className="point-check">✓</span> Department administration</li>
+                <li><span className="point-check">✓</span> Cross-department content oversight</li>
+              </ul>
+            </>
           )}
           <div className="auth-illustration-stats">
             <div><strong>7</strong><span>Semesters</span></div>
@@ -76,7 +96,7 @@ export default function Login() {
         </div>
         <div className="auth-form-panel">
           <h2>Login</h2>
-          <p className="auth-subtitle">Login as a Student or Faculty member</p>
+          <p className="auth-subtitle">Login as a Student, Faculty, or Admin</p>
 
           <div className="role-toggle">
             <button
@@ -93,6 +113,13 @@ export default function Login() {
             >
               Faculty
             </button>
+            <button
+              type="button"
+              className={role === "admin" ? "active" : ""}
+              onClick={() => setRole("admin")}
+            >
+              Admin
+            </button>
           </div>
 
           {error && <div className="auth-error">{error}</div>}
@@ -101,7 +128,7 @@ export default function Login() {
             <div className="form-group">
               <label>Email</label>
               <input
-                type="email"
+                type="text"
                 name="email"
                 placeholder="you@example.com"
                 value={form.email}
@@ -119,7 +146,7 @@ export default function Login() {
               />
             </div>
             <button type="submit" className="btn btn-primary btn-block">
-              Login as {role === "student" ? "Student" : "Faculty"}
+              Login as {role === "student" ? "Student" : role === "faculty" ? "Faculty" : "Admin"}
             </button>
           </form>
 

@@ -272,7 +272,7 @@ router.post('/', protect, checkRole('faculty'), async (req, res) => {
  * @desc    Delete a question
  * @access  Private (Faculty only)
  */
-router.delete('/:id', protect, checkRole('faculty'), async (req, res) => {
+router.delete('/:id', protect, checkRole('faculty', 'admin'), async (req, res) => {
   try {
     const question = await Question.findByIdAndDelete(req.params.id);
     if (!question) {

@@ -103,13 +103,13 @@ router.post('/', protect, checkRole('faculty'), async (req, res) => {
  * @desc    Delete a semester (must belong to one of the faculty's own departments)
  * @access  Private (Faculty only)
  */
-router.delete('/:id', protect, checkRole('faculty'), async (req, res) => {
+router.delete('/:id', protect, checkRole('faculty', 'admin'), async (req, res) => {
   try {
     const semester = await Semester.findById(req.params.id);
     if (!semester) {
       return res.status(404).json({ success: false, message: 'Semester not found' });
     }
-    if (!(req.user.departments || []).includes(semester.department)) {
+    if (req.user.role !== 'admin' && !(req.user.departments || []).includes(semester.department)) {
       return res.status(403).json({ success: false, message: 'You are not assigned to this department' });
     }
     await semester.deleteOne();

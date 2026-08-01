@@ -5,25 +5,22 @@ import apiClient from "../../api/apiClient";
 import BackButton from "../../components/BackButton";
 import "./Auth.css";
 
-const DEPARTMENTS = [
-  "Computer Science",
-  "Information Technology",
-  "Electronics & Communication",
-  "Electrical Engineering",
-  "Mechanical Engineering",
-  "Civil Engineering",
-  "MBA",
-  "MCA",
-];
-
 export default function Register() {
   const [role, setRole] = useState("student");
   const [form, setForm] = useState({ name: "", email: "", password: "", department: "", semesterId: "" });
+  const [availableDepartments, setAvailableDepartments] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [semesters, setSemesters] = useState([]);
   const [error, setError] = useState("");
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    apiClient
+      .get("/departments")
+      .then((res) => setAvailableDepartments(res.data.data.map((d) => d.name)))
+      .catch((err) => console.error("Error fetching departments:", err));
+  }, []);
 
   useEffect(() => {
     if (role !== "student" || !form.department) {
@@ -192,7 +189,7 @@ export default function Register() {
                   <label>Department</label>
                   <select name="department" value={form.department} onChange={handleChange}>
                     <option value="">Select your department</option>
-                    {DEPARTMENTS.map((d) => (
+                    {availableDepartments.map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
@@ -223,7 +220,7 @@ export default function Register() {
                     {departments.length === 0 ? "Select department(s)" : departments.join(", ")}
                   </summary>
                   <div className="dept-dropdown-list">
-                    {DEPARTMENTS.map((d) => (
+                    {availableDepartments.map((d) => (
                       <label key={d} className="dept-dropdown-item">
                         <input
                           type="checkbox"

@@ -1,20 +1,18 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import "./Faculty.css";
+import "../faculty/Faculty.css";
 
 const links = [
-  { to: "/faculty/dashboard", label: "Overview", icon: "📊" },
-  { to: "/faculty/content", label: "Content Tree", icon: "🌳" },
-  { to: "/faculty/semesters", label: "Semesters", icon: "🗂" },
-  { to: "/faculty/subjects", label: "Subjects", icon: "📘" },
-  { to: "/faculty/chapters", label: "Chapters", icon: "📑" },
-  { to: "/faculty/questions", label: "Questions", icon: "❓" },
-  { to: "/faculty/live", label: "Live Quiz", icon: "⚡" },
-  { to: "/faculty/doubts", label: "Student Doubts", icon: "💬" },
-  { to: "/faculty/reports", label: "Reports", icon: "📈" },
+  { to: "/admin/overview", label: "Overview", icon: "📊" },
+  { to: "/admin/departments", label: "Departments", icon: "🏛" },
+  { to: "/admin/faculty", label: "Faculty", icon: "👨‍🏫" },
+  { to: "/admin/students", label: "Students", icon: "🎓" },
+  { to: "/admin/content", label: "Content Tree", icon: "🌳" },
+  { to: "/admin/reports", label: "Reports", icon: "📈" },
+  { to: "/admin/live-sessions", label: "Live Sessions", icon: "⚡" },
 ];
 
-export default function FacultyLayout() {
+export default function AdminLayout() {
   const { user } = useAuth();
 
   return (
@@ -23,11 +21,11 @@ export default function FacultyLayout() {
         <div className="faculty-sidebar-brand">
           <span className="navbar-logo">QW</span>
           <div>
-            <strong>Faculty Panel</strong>
+            <strong>Admin Panel</strong>
             <span>{user?.name}</span>
           </div>
         </div>
-        <h4>Manage</h4>
+        <h4>Platform</h4>
         {links.map((l) => (
           <NavLink
             key={l.to}
@@ -38,7 +36,7 @@ export default function FacultyLayout() {
           </NavLink>
         ))}
         <div className="faculty-sidebar-footer">
-          <span className="badge badge-teal">Faculty</span>
+          <span className="badge badge-gold">Admin</span>
         </div>
       </aside>
       <main className="faculty-content">
