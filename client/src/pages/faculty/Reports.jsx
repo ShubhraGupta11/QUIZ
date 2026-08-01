@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 
 function toCSV(rows) {
@@ -92,6 +93,7 @@ export default function Reports() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Analytics</span>

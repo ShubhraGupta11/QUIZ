@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 import "../../styles/liveQuiz.css";
 
@@ -129,6 +130,7 @@ export default function LiveQuizJoin() {
 
   return (
     <div className="page container">
+      {(phase === "join" || phase === "lobby") && <BackButton />}
       <div className="page-header">
         <div>
           <span className="eyebrow">Live Quiz Battle</span>

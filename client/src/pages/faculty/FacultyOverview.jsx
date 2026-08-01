@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../api/apiClient";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 
 export default function FacultyOverview() {
@@ -30,6 +31,7 @@ export default function FacultyOverview() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Faculty overview</span>

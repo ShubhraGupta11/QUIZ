@@ -1,0 +1,20 @@
+.page-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1.5px solid var(--border-soft, var(--border));
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.page-back-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink, var(--ink));
+}

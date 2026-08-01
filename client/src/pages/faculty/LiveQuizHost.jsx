@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
 import StepCard from "../../components/StepCard";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 import "../../styles/liveQuiz.css";
 
@@ -226,6 +227,7 @@ export default function LiveQuizHost() {
 
   return (
     <div>
+      {phase === "setup" && <BackButton />}
       <div className="page-header">
         <div>
           <span className="eyebrow">Live Quiz Battle</span>

@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
 import StepCard from "../../components/StepCard";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 
 export default function ManageQuestions() {
@@ -331,6 +332,7 @@ export default function ManageQuestions() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Content manager</span>

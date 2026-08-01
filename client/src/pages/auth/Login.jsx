@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import BackButton from "../../components/BackButton";
 import "./Auth.css";
 
 export default function Login() {
@@ -31,6 +32,9 @@ export default function Login() {
 
   return (
     <div className="auth-page">
+      <div style={{ position: "absolute", top: 88, left: 24 }}>
+        <BackButton />
+      </div>
       <div className="auth-wrapper">
         <div className="auth-illustration">
           {role === "student" ? (

@@ -12,6 +12,7 @@ import {
   Bar,
 } from "recharts";
 import { useQuiz } from "../../context/QuizContext";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 function scoreClass(percent) {
@@ -67,6 +68,7 @@ export default function Performance() {
 
   return (
     <div className="page container">
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Analytics</span>

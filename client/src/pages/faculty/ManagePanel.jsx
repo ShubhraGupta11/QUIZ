@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import apiClient from "../../api/apiClient";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 
 export default function ManagePanel({ type, title, description, parentOptions, parentLabel, onRefreshParent, departmentOptions, getNameOptions }) {
@@ -100,6 +101,7 @@ export default function ManagePanel({ type, title, description, parentOptions, p
 
   return (
     <div>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Content manager</span>

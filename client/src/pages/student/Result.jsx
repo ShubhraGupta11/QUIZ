@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import CircularProgress from "../../components/CircularProgress";
 import { useQuiz } from "../../context/QuizContext";
 import apiClient from "../../api/apiClient";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function Result() {
@@ -53,6 +54,7 @@ export default function Result() {
 
   return (
     <div className="page container">
+      <BackButton />
       <div className="result-shell">
         <div className="result-hero card fade-in">
           <CircularProgress percent={percent} color={isGood ? "var(--teal)" : "var(--accent)"} />

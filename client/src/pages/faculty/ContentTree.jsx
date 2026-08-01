@@ -4,6 +4,7 @@ import apiClient from "../../api/apiClient";
 import { useAuth } from "../../context/AuthContext";
 import { getSubjectSuggestions } from "../../data/subjectCatalog";
 import StepCard from "../../components/StepCard";
+import BackButton from "../../components/BackButton";
 import "./Faculty.css";
 
 export default function ContentTree() {
@@ -110,6 +111,7 @@ export default function ContentTree() {
 
   return (
     <div>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Content Manager</span>

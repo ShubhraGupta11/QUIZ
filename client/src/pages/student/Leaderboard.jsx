@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function Leaderboard() {
   const { chapterId } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const meta = location.state || {};
 
   const [rows, setRows] = useState([]);
@@ -23,9 +23,7 @@ export default function Leaderboard() {
 
   return (
     <div className="page container">
-      <button className="back-link" style={{ background: "none", border: "none", cursor: "pointer" }} onClick={() => navigate(-1)}>
-        ← Back
-      </button>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Rankings</span>

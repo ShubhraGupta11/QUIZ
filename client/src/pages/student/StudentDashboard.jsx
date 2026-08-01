@@ -6,6 +6,7 @@ import { getSubjects } from "../../api/mockData";
 import apiClient from "../../api/apiClient";
 import StepCard from "../../components/StepCard";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function StudentDashboard() {
@@ -56,6 +57,7 @@ export default function StudentDashboard() {
 
   return (
     <div className="page container">
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Student dashboard</span>

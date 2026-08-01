@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { getSubjects, findSemester } from "../../api/mockData";
 import StepCard from "../../components/StepCard";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function SubjectSelect() {
@@ -21,7 +22,7 @@ export default function SubjectSelect() {
 
   return (
     <div className="page container">
-      <Link to="/student/dashboard" className="back-link">← Change Semester</Link>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Step 2 of 3</span>

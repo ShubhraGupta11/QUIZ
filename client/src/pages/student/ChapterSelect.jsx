@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { getChapters, findSemester, findSubject } from "../../api/mockData";
 import StepCard from "../../components/StepCard";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function ChapterSelect() {
@@ -23,7 +24,7 @@ export default function ChapterSelect() {
 
   return (
     <div className="page container">
-      <Link to={`/student/${semesterId}/subjects`} className="back-link">← Change Subject</Link>
+      <BackButton />
       <div className="page-header">
         <div>
           <span className="eyebrow">Step 3 of 3</span>

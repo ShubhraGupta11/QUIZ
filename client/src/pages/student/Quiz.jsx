@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getQuestions } from "../../api/mockData";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
+import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 const TIME_PER_QUESTION = 30; // seconds
@@ -133,6 +134,7 @@ export default function Quiz() {
 
   return (
     <div className="page container">
+      <BackButton />
       <div className="quiz-shell">
         <div className="quiz-top">
           <span className="quiz-progress-text">
