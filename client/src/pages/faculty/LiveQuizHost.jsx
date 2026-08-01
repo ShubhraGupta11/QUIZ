@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
+import StepCard from "../../components/StepCard";
 import "./Faculty.css";
 import "../../styles/liveQuiz.css";
 
@@ -238,21 +239,63 @@ export default function LiveQuizHost() {
       {phase === "setup" && (
         <div className="faculty-panel card">
           <div className="panel-header"><h3>Select a Chapter to Host</h3></div>
-          <div className="inline-form" style={{ display: "flex", gap: 12 }}>
-            <select value={selectedSemester} onChange={(e) => { setSelectedSemester(e.target.value); setSelectedSubject(""); setChapterId(""); }}>
-              <option value="">Choose Semester</option>
-              {semesters.map((s) => <option key={s._id} value={s._id}>{s.name} ({s.department})</option>)}
-            </select>
-            <select value={selectedSubject} disabled={!selectedSemester} onChange={(e) => { setSelectedSubject(e.target.value); setChapterId(""); }}>
-              <option value="">Choose Subject</option>
-              {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-            </select>
-            <select value={chapterId} disabled={!selectedSubject} onChange={(e) => setChapterId(e.target.value)}>
-              <option value="">Choose Chapter</option>
-              {chapters.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-            <button className="btn btn-primary" onClick={startHosting} disabled={!chapterId}>Start Live Session</button>
-          </div>
+
+          {(selectedSemester || selectedSubject || chapterId) && (
+            <div className="ct-breadcrumb">
+              <span onClick={() => { setSelectedSemester(""); setSelectedSubject(""); setChapterId(""); }}>All Semesters</span>
+              {selectedSemester && (
+                <>
+                  {" › "}
+                  <span onClick={() => { setSelectedSubject(""); setChapterId(""); }}>
+                    {semesters.find((s) => s._id === selectedSemester)?.name} ({semesters.find((s) => s._id === selectedSemester)?.department})
+                  </span>
+                </>
+              )}
+              {selectedSubject && (
+                <>
+                  {" › "}
+                  <span onClick={() => setChapterId("")}>{subjects.find((s) => s._id === selectedSubject)?.name}</span>
+                </>
+              )}
+              {chapterId && (
+                <>
+                  {" › "}
+                  <span className="current">{chapters.find((c) => c._id === chapterId)?.name}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {!selectedSemester && (
+            <div className="semester-card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))" }}>
+              {semesters.map((s) => (
+                <button type="button" key={s._id} className="semester-card" onClick={() => { setSelectedSemester(s._id); setSelectedSubject(""); setChapterId(""); }}>
+                  {s.name}
+                  <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.7 }}>{s.department}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedSemester && !selectedSubject && (
+            <div className="grid-cards">
+              {subjects.map((s) => (
+                <StepCard key={s._id} title={s.name} subtitle="Tap to view chapters" icon="📘" onClick={() => { setSelectedSubject(s._id); setChapterId(""); }} />
+              ))}
+            </div>
+          )}
+
+          {selectedSubject && !chapterId && (
+            <div className="grid-cards">
+              {chapters.map((c) => (
+                <StepCard key={c._id} title={c.name} subtitle="Tap to select for hosting" icon="📑" onClick={() => setChapterId(c._id)} />
+              ))}
+            </div>
+          )}
+
+          {chapterId && (
+            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={startHosting}>Start Live Session →</button>
+          )}
         </div>
       )}
 

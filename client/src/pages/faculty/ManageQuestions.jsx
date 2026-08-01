@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
+import StepCard from "../../components/StepCard";
 import "./Faculty.css";
 
 export default function ManageQuestions() {
@@ -343,53 +344,70 @@ export default function ManageQuestions() {
         </div>
       </div>
 
-      {/* Chapter Selection Panel */}
+      {/* Chapter Selection Panel — card-based drill-down */}
       <div className="faculty-panel card" style={{ marginBottom: 24 }}>
         <div className="panel-header">
           <h3>Select Semester, Subject & Chapter</h3>
         </div>
-        <div className="inline-form" style={{ display: "flex", gap: "12px", width: "100%" }}>
-          <select
-            style={{ flex: 1 }}
-            value={selectedSemester}
-            onChange={(e) => setSelectedSemester(e.target.value)}
-          >
-            <option value="">Choose Semester</option>
+
+        {(selectedSemester || selectedSubject || chapterId) && (
+          <div className="ct-breadcrumb">
+            <span onClick={() => { setSelectedSemester(""); setSelectedSubject(""); setChapterId(""); }}>All Semesters</span>
+            {selectedSemester && (
+              <>
+                {" › "}
+                <span onClick={() => { setSelectedSubject(""); setChapterId(""); }}>
+                  {semesters.find((s) => s._id === selectedSemester)?.name} ({semesters.find((s) => s._id === selectedSemester)?.department})
+                </span>
+              </>
+            )}
+            {selectedSubject && (
+              <>
+                {" › "}
+                <span onClick={() => setChapterId("")}>{subjects.find((s) => s._id === selectedSubject)?.name}</span>
+              </>
+            )}
+            {chapterId && (
+              <>
+                {" › "}
+                <span className="current">{chapters.find((c) => c._id === chapterId)?.name}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {!selectedSemester && (
+          <div className="semester-card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))" }}>
             {semesters.map((sem) => (
-              <option key={sem._id} value={sem._id}>
-                {sem.name} ({sem.department})
-              </option>
+              <button type="button" key={sem._id} className="semester-card" onClick={() => setSelectedSemester(sem._id)}>
+                {sem.name}
+                <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.7 }}>{sem.department}</div>
+              </button>
             ))}
-          </select>
+          </div>
+        )}
 
-          <select
-            style={{ flex: 1 }}
-            value={selectedSubject}
-            disabled={!selectedSemester}
-            onChange={(e) => setSelectedSubject(e.target.value)}
-          >
-            <option value="">Choose Subject</option>
+        {selectedSemester && !selectedSubject && (
+          <div className="grid-cards">
             {subjects.map((sub) => (
-              <option key={sub._id} value={sub._id}>
-                {sub.name}
-              </option>
+              <StepCard key={sub._id} title={sub.name} subtitle="Tap to view chapters" icon="📘" onClick={() => setSelectedSubject(sub._id)} />
             ))}
-          </select>
+          </div>
+        )}
 
-          <select
-            style={{ flex: 1 }}
-            value={chapterId}
-            disabled={!selectedSubject}
-            onChange={(e) => setChapterId(e.target.value)}
-          >
-            <option value="">Choose Chapter</option>
+        {selectedSubject && !chapterId && (
+          <div className="grid-cards">
             {chapters.map((chap) => (
-              <option key={chap._id} value={chap._id}>
-                {chap.name}
-              </option>
+              <StepCard
+                key={chap._id}
+                title={chap.name}
+                subtitle={`${chap.questionCount ?? 0} question${chap.questionCount === 1 ? "" : "s"}`}
+                icon="📑"
+                onClick={() => setChapterId(chap._id)}
+              />
             ))}
-          </select>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Split grid for Manual Entry & AI generation */}

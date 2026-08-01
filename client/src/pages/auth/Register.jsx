@@ -193,15 +193,23 @@ export default function Register() {
                     ))}
                   </select>
                 </div>
-                <div className="form-group">
-                  <label>Semester</label>
-                  <select name="semesterId" value={form.semesterId} onChange={handleChange}>
-                    <option value="">Select your semester</option>
-                    {semesters.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {form.department && (
+                  <div className="form-group">
+                    <label>Semester</label>
+                    <div className="semester-card-grid">
+                      {semesters.map((s) => (
+                        <button
+                          type="button"
+                          key={s.id}
+                          className={`semester-card ${form.semesterId === s.id ? "active" : ""}`}
+                          onClick={() => setForm({ ...form, semesterId: s.id })}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="form-group">
