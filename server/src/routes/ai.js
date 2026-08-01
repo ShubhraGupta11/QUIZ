@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
+const AdmZip = require('adm-zip');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { protect, checkRole } = require('../middleware/auth');
 const Chapter = require('../models/Chapter');
@@ -15,12 +16,13 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     if (
       file.mimetype === 'application/pdf' ||
-      file.mimetype === 'application/vnd.ms-powerpoint' ||
       file.mimetype === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ) {
       cb(null, true);
+    } else if (file.mimetype === 'application/vnd.ms-powerpoint') {
+      cb(new Error('Legacy .ppt files are not supported for text extraction — please save as .pptx and re-upload.'), false);
     } else {
-      cb(new Error('Only PDF and PPT/PPTX files are supported'), false);
+      cb(new Error('Only PDF and PPTX files are supported'), false);
     }
   },
 });
@@ -34,6 +36,34 @@ async function extractTextFromPDF(buffer) {
     console.error('Error parsing PDF:', error);
     throw new Error('Failed to parse PDF file');
   }
+}
+
+// Helper to extract real text content from a .pptx file. PPTX is a zip archive
+// of XML — each slide's spoken/visible text lives in <a:t> tags in
+// ppt/slides/slideN.xml. Legacy binary .ppt files aren't zip-based and can't be
+// parsed this way, so those are rejected with a clear message asking for .pptx.
+function extractTextFromPPTX(buffer) {
+  const zip = new AdmZip(buffer);
+  const slideEntries = zip
+    .getEntries()
+    .filter((e) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
+    .sort((a, b) => {
+      const numA = parseInt(a.entryName.match(/slide(\d+)\.xml/)[1], 10);
+      const numB = parseInt(b.entryName.match(/slide(\d+)\.xml/)[1], 10);
+      return numA - numB;
+    });
+
+  if (slideEntries.length === 0) {
+    throw new Error('No slides found in this PPTX file.');
+  }
+
+  const slideTexts = slideEntries.map((entry, i) => {
+    const xml = entry.getData().toString('utf8');
+    const matches = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]);
+    return `--- Slide ${i + 1} ---\n${matches.join(' ')}`;
+  });
+
+  return slideTexts.join('\n\n');
 }
 
 // Ask OpenRouter's free-tier LLM to generate a batch of MCQs as raw JSON.
@@ -155,16 +185,19 @@ router.post(
 
       let docContext = '';
       if (req.file) {
-        // If a PDF is uploaded, parse it
-        if (req.file.mimetype === 'application/pdf') {
-          docContext = await extractTextFromPDF(req.file.buffer);
-          // Limit context size to avoid exceeding LLM context token limits
-          if (docContext.length > 50000) {
-            docContext = docContext.substring(0, 50000) + '... [content truncated]';
-          }
-        } else {
-          // PPT parsing placeholder (requires custom libraries, we notify user text extraction for PPT is coming soon, but use file details to generate)
-          docContext = `[PPT Content: File Name: ${req.file.originalname}]`;
+        try {
+          docContext = req.file.mimetype === 'application/pdf'
+            ? await extractTextFromPDF(req.file.buffer)
+            : extractTextFromPPTX(req.file.buffer);
+        } catch (extractErr) {
+          return res.status(400).json({ success: false, message: 'Failed to read the uploaded file: ' + extractErr.message });
+        }
+        if (!docContext || !docContext.trim()) {
+          return res.status(400).json({ success: false, message: 'Could not extract any text from the uploaded file. It may be scanned/image-based or empty.' });
+        }
+        // Limit context size to avoid exceeding LLM context token limits
+        if (docContext.length > 50000) {
+          docContext = docContext.substring(0, 50000) + '... [content truncated]';
         }
       }
 
@@ -198,7 +231,7 @@ router.post(
 Generate exactly ${batchSize} high-quality Multiple Choice Questions (MCQs) for the chapter "${chapterName}" under the subject "${subjectName}" for students of "${semesterName}".
 The difficulty of this batch of questions must be: ${batchDiff.toUpperCase()}.
 
-${docContext ? `Generate the questions based on the following uploaded textbook reference text:\n\n---START TEXT---\n${docContext}\n---END TEXT---\n\n` : ''}
+${docContext ? `IMPORTANT: The following is the exact reference material uploaded by the instructor. You MUST base every question strictly and only on facts, definitions, examples, and concepts explicitly present in this text. Do NOT introduce outside knowledge, do NOT make up details not present in the text, and do NOT ask about anything the text does not cover. Every correct answer must be directly verifiable from this text.\n\n---START REFERENCE TEXT---\n${docContext}\n---END REFERENCE TEXT---\n\n` : ''}
 Each question must contain:
 1. "text": The question string.
 2. "options": An array of exactly 4 strings.

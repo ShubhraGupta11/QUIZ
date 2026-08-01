@@ -11,6 +11,13 @@ export default function LiveQuizHost() {
   const [selectedSubject, setSelectedSubject] = useState("");
   const [chapterId, setChapterId] = useState("");
 
+  const [newChapterName, setNewChapterName] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
+  const [genCount, setGenCount] = useState(10);
+  const [genDifficulty, setGenDifficulty] = useState("mixed");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genStatus, setGenStatus] = useState("");
+
   const [phase, setPhase] = useState("setup"); // setup -> lobby -> question -> leaderboard -> finished
   const [code, setCode] = useState("");
   const [players, setPlayers] = useState([]);
@@ -69,11 +76,10 @@ export default function LiveQuizHost() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function startHosting() {
-    if (!chapterId) return alert("Please select a chapter first.");
+  function startHostingWith(idToHost) {
     setError("");
     socket.connect();
-    socket.emit("host:create", { chapterId }, (res) => {
+    socket.emit("host:create", { chapterId: idToHost }, (res) => {
       if (!res.success) {
         setError(res.message);
         socket.disconnect();
@@ -83,6 +89,53 @@ export default function LiveQuizHost() {
       setTotalQuestions(res.totalQuestions);
       setPhase("lobby");
     });
+  }
+
+  function startHosting() {
+    if (!chapterId) return alert("Please select a chapter first.");
+    startHostingWith(chapterId);
+  }
+
+  async function generateAndHost() {
+    if (!uploadFile) return alert("Please choose a PDF or PPTX file first.");
+    if (!selectedSubject) return alert("Please select a subject first.");
+
+    setIsGenerating(true);
+    setGenStatus("Reading document and generating questions...");
+    setError("");
+
+    try {
+      let targetChapterId = chapterId;
+      if (!targetChapterId) {
+        if (!newChapterName.trim()) {
+          alert("Please select an existing chapter or type a name for a new one.");
+          setIsGenerating(false);
+          setGenStatus("");
+          return;
+        }
+        const chapRes = await apiClient.post("/chapters", { name: newChapterName.trim(), subjectId: selectedSubject });
+        targetChapterId = chapRes.data.data._id;
+      }
+
+      const formData = new FormData();
+      formData.append("chapterId", targetChapterId);
+      formData.append("difficulty", genDifficulty);
+      formData.append("count", genCount);
+      formData.append("file", uploadFile);
+
+      const genRes = await apiClient.post("/faculty/generate-mcqs", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setGenStatus(`Generated ${genRes.data.count} questions. Starting live session...`);
+      setChapterId(targetChapterId);
+      startHostingWith(targetChapterId);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to generate questions from the uploaded file.");
+    } finally {
+      setIsGenerating(false);
+      setGenStatus("");
+    }
   }
 
   const nextQuestion = useCallback(() => {
@@ -140,6 +193,55 @@ export default function LiveQuizHost() {
             </select>
             <button className="btn btn-primary" onClick={startHosting} disabled={!chapterId}>Start Live Session</button>
           </div>
+        </div>
+      )}
+
+      {phase === "setup" && (
+        <div className="faculty-panel card" style={{ marginTop: 24 }}>
+          <div className="panel-header">
+            <h3>Or Generate Questions On the Spot from PDF/PPT</h3>
+            <span className="badge badge-teal">AI-powered</span>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--muted-ink)", marginBottom: 16 }}>
+            Upload a PDF or PPTX and questions will be generated strictly from its content, saved
+            into the chapter above (or a new one), and the live session will start automatically.
+            Select a Semester and Subject above first.
+          </p>
+          {!chapterId && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "var(--muted-ink)", display: "block", marginBottom: 4 }}>
+                New chapter name (used if no existing chapter is selected above)
+              </label>
+              <input
+                placeholder="e.g. Chapter 5 - Networking"
+                value={newChapterName}
+                onChange={(e) => setNewChapterName(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="file"
+              accept=".pdf,.pptx"
+              onChange={(e) => setUploadFile(e.target.files[0])}
+            />
+            <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value))}>
+              <option value={10}>10 Questions</option>
+              <option value={25}>25 Questions</option>
+              <option value={50}>50 Questions</option>
+            </select>
+            <select value={genDifficulty} onChange={(e) => setGenDifficulty(e.target.value)}>
+              <option value="mixed">Mixed Difficulty</option>
+              <option value="easy">All Easy</option>
+              <option value="medium">All Medium</option>
+              <option value="hard">All Hard</option>
+            </select>
+            <button className="btn btn-primary" onClick={generateAndHost} disabled={isGenerating || !uploadFile || !selectedSubject}>
+              {isGenerating ? "Generating..." : "✨ Generate & Start Live"}
+            </button>
+          </div>
+          {genStatus && <p style={{ marginTop: 12, fontSize: 13, color: "var(--muted-ink)" }}>{genStatus}</p>}
         </div>
       )}
 
