@@ -8,6 +8,7 @@ const links = [
   { to: "/faculty/subjects", label: "Subjects", icon: "📘" },
   { to: "/faculty/chapters", label: "Chapters", icon: "📑" },
   { to: "/faculty/questions", label: "Questions", icon: "❓" },
+  { to: "/faculty/live", label: "Live Quiz", icon: "⚡" },
   { to: "/faculty/reports", label: "Reports", icon: "📈" },
 ];
 

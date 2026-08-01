@@ -1,7 +1,10 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const { Server } = require('socket.io');
 const connectDB = require('./config/db');
+const { registerLiveQuizHandlers } = require('./live/socketHandlers');
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +43,12 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: '*' },
+});
+registerLiveQuizHandlers(io);
+
+httpServer.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });

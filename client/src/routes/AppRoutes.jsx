@@ -14,6 +14,7 @@ import Quiz from "../pages/student/Quiz";
 import Result from "../pages/student/Result";
 import Performance from "../pages/student/Performance";
 import Leaderboard from "../pages/student/Leaderboard";
+import LiveQuizJoin from "../pages/student/LiveQuizJoin";
 
 import FacultyLayout from "../pages/faculty/FacultyLayout";
 import FacultyOverview from "../pages/faculty/FacultyOverview";
@@ -22,6 +23,7 @@ import ManageSubjects from "../pages/faculty/ManageSubjects";
 import ManageChapters from "../pages/faculty/ManageChapters";
 import ManageQuestions from "../pages/faculty/ManageQuestions";
 import Reports from "../pages/faculty/Reports";
+import LiveQuizHost from "../pages/faculty/LiveQuizHost";
 
 export default function AppRoutes() {
   return (
@@ -61,6 +63,10 @@ export default function AppRoutes() {
           path="/student/leaderboard/:chapterId"
           element={<ProtectedRoute role="student"><Leaderboard /></ProtectedRoute>}
         />
+        <Route
+          path="/student/live"
+          element={<ProtectedRoute role="student"><LiveQuizJoin /></ProtectedRoute>}
+        />
 
         <Route
           path="/faculty"
@@ -72,6 +78,7 @@ export default function AppRoutes() {
           <Route path="chapters" element={<ManageChapters />} />
           <Route path="questions" element={<ManageQuestions />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="live" element={<LiveQuizHost />} />
         </Route>
       </Routes>
     </>

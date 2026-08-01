@@ -38,9 +38,14 @@ export default function Navbar() {
               Dashboard
             </Link>
             {user.role === "student" && (
-              <Link to="/student/performance" className="navbar-link">
-                Performance
-              </Link>
+              <>
+                <Link to="/student/performance" className="navbar-link">
+                  Performance
+                </Link>
+                <Link to="/student/live" className="navbar-link">
+                  ⚡ Live Quiz
+                </Link>
+              </>
             )}
             <span className="navbar-divider" />
             <span className="navbar-user">
