@@ -9,18 +9,36 @@ const manager = require('./liveQuizManager');
 // fires. This guarantees authentication finishes (and socket.data.user is set)
 // before the client can possibly emit anything — avoiding a race where a fast
 // client emits an event before the server has registered its listeners.
+//
+// Two ways to connect:
+// - `auth.token` — a real logged-in account (student/faculty), used for hosting
+//   and for the normal in-app "Live Quiz" join flow.
+// - `auth.guestName` — anonymous QR-scan join, no account needed. Guests can
+//   only ever join as players (never host), and their scores aren't written to
+//   the permanent Attempt history since there's no real student account to
+//   attach them to.
 async function socketAuthMiddleware(socket, next) {
   const token = socket.handshake.auth?.token;
-  if (!token) return next(new Error('Authentication required'));
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'smartquiz_super_secret_jwt_key_2026');
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user) return next(new Error('Authentication failed'));
-    socket.data.user = user;
-    next();
-  } catch {
-    next(new Error('Authentication failed'));
+  const guestName = socket.handshake.auth?.guestName;
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'smartquiz_super_secret_jwt_key_2026');
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) return next(new Error('Authentication failed'));
+      socket.data.user = user;
+      return next();
+    } catch {
+      return next(new Error('Authentication failed'));
+    }
   }
+
+  if (guestName && guestName.trim()) {
+    socket.data.user = { _id: null, name: guestName.trim().slice(0, 40), role: 'guest' };
+    return next();
+  }
+
+  next(new Error('Authentication required'));
 }
 
 function registerLiveQuizHandlers(io) {
@@ -80,7 +98,7 @@ function registerLiveQuizHandlers(io) {
       if (!session) return ack?.({ success: false, message: 'Invalid or expired room code' });
       if (session.status !== 'lobby') return ack?.({ success: false, message: 'This quiz has already started' });
 
-      manager.addPlayer(session, socket.id, user._id.toString(), user.name);
+      manager.addPlayer(session, socket.id, user._id ? user._id.toString() : null, user.name);
       socket.join(`live:${code}`);
       socket.data.liveCode = code;
 
@@ -166,20 +184,24 @@ function registerLiveQuizHandlers(io) {
       session.status = 'finished';
 
       try {
+        // Guests (QR-scan, no account) have no userId to attach an Attempt to —
+        // their scores only ever live in this session's in-memory leaderboard.
         await Promise.all(
-          results.map((r) =>
-            Attempt.create({
-              studentId: r.userId,
-              chapterId: session.chapterId,
-              score: r.correctCount * (session.questions[0]?.marks || 2),
-              total: session.questions.length * (session.questions[0]?.marks || 2),
-              timeTaken: 0,
-              answers: session.questions.map((q, i) => {
-                const player = [...session.players.values()].find((p) => p.userId === r.userId);
-                return player?.answers[i]?.index ?? null;
-              }),
-            })
-          )
+          results
+            .filter((r) => r.userId)
+            .map((r) =>
+              Attempt.create({
+                studentId: r.userId,
+                chapterId: session.chapterId,
+                score: r.correctCount * (session.questions[0]?.marks || 2),
+                total: session.questions.length * (session.questions[0]?.marks || 2),
+                timeTaken: 0,
+                answers: session.questions.map((q, i) => {
+                  const player = [...session.players.values()].find((p) => p.userId === r.userId);
+                  return player?.answers[i]?.index ?? null;
+                }),
+              })
+            )
         );
       } catch (err) {
         console.error('Error persisting live quiz attempts:', err.message);

@@ -352,6 +352,17 @@ export default function LiveQuizHost() {
         <div className="lq-lobby">
           <div className="lq-pin-label">Join at your device — Game PIN</div>
           <div className="lq-pin-code">{code}</div>
+
+          <div className="lq-qr-box">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/join/${code}`)}`}
+              alt="Scan to join"
+              width={160}
+              height={160}
+            />
+            <p style={{ fontSize: 12.5 }}>Scan to join instantly — no sign-in needed, just type your name.</p>
+          </div>
+
           <p style={{ fontSize: 15 }}>{players.length} player{players.length === 1 ? "" : "s"} joined</p>
           <div className="lq-players-grid">
             {players.map((p, i) => <span key={i} className="lq-player-chip">{p}</span>)}

@@ -68,6 +68,8 @@ export default function AppRoutes() {
           path="/student/live"
           element={<ProtectedRoute role="student"><LiveQuizJoin /></ProtectedRoute>}
         />
+        {/* Public QR-scan join — no login required, guests join by name only */}
+        <Route path="/join/:code" element={<LiveQuizJoin />} />
 
         <Route
           path="/faculty"

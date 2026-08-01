@@ -40,6 +40,28 @@
   50% { transform: scale(1.03); }
 }
 
+.lq-qr-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.95);
+  padding: 16px;
+  border-radius: 14px;
+  margin: 8px 0 20px;
+}
+
+.lq-qr-box img {
+  border-radius: 6px;
+}
+
+.lq-qr-box p {
+  color: #333;
+  max-width: 200px;
+  text-align: center;
+  line-height: 1.4;
+}
+
 .lq-players-grid {
   display: flex;
   flex-wrap: wrap;
