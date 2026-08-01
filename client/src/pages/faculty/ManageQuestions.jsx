@@ -1,9 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
 import "./Faculty.css";
 
 export default function ManageQuestions() {
+  const [searchParams] = useSearchParams();
+  // Deep-link support: /faculty/questions?semesterId=&subjectId=&chapterId=
+  // lets the Content Tree jump straight here with everything pre-selected,
+  // instead of forcing faculty to re-pick Semester -> Subject -> Chapter again.
+  const pendingParams = useRef({
+    semesterId: searchParams.get("semesterId") || "",
+    subjectId: searchParams.get("subjectId") || "",
+    chapterId: searchParams.get("chapterId") || "",
+  });
+
   const [semesters, setSemesters] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
@@ -50,6 +61,10 @@ export default function ManageQuestions() {
     try {
       const res = await apiClient.get("/semesters");
       setSemesters(res.data.data);
+      const pending = pendingParams.current.semesterId;
+      if (pending && res.data.data.some((s) => s._id === pending)) {
+        setSelectedSemester(pending);
+      }
     } catch (err) {
       console.error("Error fetching semesters", err);
     }
@@ -71,9 +86,15 @@ export default function ManageQuestions() {
     try {
       const res = await apiClient.get(`/subjects?semesterId=${semId}`);
       setSubjects(res.data.data);
-      setSelectedSubject("");
-      setChapters([]);
-      setChapterId("");
+      const pending = pendingParams.current.subjectId;
+      if (pending && res.data.data.some((s) => s._id === pending)) {
+        setSelectedSubject(pending);
+        pendingParams.current.semesterId = "";
+      } else {
+        setSelectedSubject("");
+        setChapters([]);
+        setChapterId("");
+      }
     } catch (err) {
       console.error("Error fetching subjects", err);
     }
@@ -93,7 +114,14 @@ export default function ManageQuestions() {
     try {
       const res = await apiClient.get(`/chapters?subjectId=${subId}`);
       setChapters(res.data.data);
-      setChapterId("");
+      const pending = pendingParams.current.chapterId;
+      if (pending && res.data.data.some((c) => c._id === pending)) {
+        setChapterId(pending);
+        pendingParams.current.subjectId = "";
+        pendingParams.current.chapterId = "";
+      } else {
+        setChapterId("");
+      }
     } catch (err) {
       console.error("Error fetching chapters", err);
     }

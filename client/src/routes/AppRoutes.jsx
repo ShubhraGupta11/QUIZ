@@ -18,6 +18,7 @@ import LiveQuizJoin from "../pages/student/LiveQuizJoin";
 
 import FacultyLayout from "../pages/faculty/FacultyLayout";
 import FacultyOverview from "../pages/faculty/FacultyOverview";
+import ContentTree from "../pages/faculty/ContentTree";
 import ManageSemesters from "../pages/faculty/ManageSemesters";
 import ManageSubjects from "../pages/faculty/ManageSubjects";
 import ManageChapters from "../pages/faculty/ManageChapters";
@@ -73,6 +74,7 @@ export default function AppRoutes() {
           element={<ProtectedRoute role="faculty"><FacultyLayout /></ProtectedRoute>}
         >
           <Route path="dashboard" element={<FacultyOverview />} />
+          <Route path="content" element={<ContentTree />} />
           <Route path="semesters" element={<ManageSemesters />} />
           <Route path="subjects" element={<ManageSubjects />} />
           <Route path="chapters" element={<ManageChapters />} />

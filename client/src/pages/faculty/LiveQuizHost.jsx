@@ -1,10 +1,20 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import apiClient from "../../api/apiClient";
 import { getLiveSocket, disconnectLiveSocket } from "../../api/liveSocket";
 import "./Faculty.css";
 import "../../styles/liveQuiz.css";
 
 export default function LiveQuizHost() {
+  const [searchParams] = useSearchParams();
+  // Deep-link support: /faculty/live?semesterId=&subjectId=&chapterId= lets
+  // the Content Tree jump straight here with the chapter pre-selected.
+  const pendingParams = useRef({
+    semesterId: searchParams.get("semesterId") || "",
+    subjectId: searchParams.get("subjectId") || "",
+    chapterId: searchParams.get("chapterId") || "",
+  });
+
   const [semesters, setSemesters] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
@@ -35,17 +45,38 @@ export default function LiveQuizHost() {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    apiClient.get("/semesters").then((res) => setSemesters(res.data.data));
+    apiClient.get("/semesters").then((res) => {
+      setSemesters(res.data.data);
+      const pending = pendingParams.current.semesterId;
+      if (pending && res.data.data.some((s) => s._id === pending)) {
+        setSelectedSemester(pending);
+      }
+    });
   }, []);
 
   useEffect(() => {
     if (!selectedSemester) return setSubjects([]);
-    apiClient.get(`/subjects?semesterId=${selectedSemester}`).then((res) => setSubjects(res.data.data));
+    apiClient.get(`/subjects?semesterId=${selectedSemester}`).then((res) => {
+      setSubjects(res.data.data);
+      const pending = pendingParams.current.subjectId;
+      if (pending && res.data.data.some((s) => s._id === pending)) {
+        setSelectedSubject(pending);
+        pendingParams.current.semesterId = "";
+      }
+    });
   }, [selectedSemester]);
 
   useEffect(() => {
     if (!selectedSubject) return setChapters([]);
-    apiClient.get(`/chapters?subjectId=${selectedSubject}`).then((res) => setChapters(res.data.data));
+    apiClient.get(`/chapters?subjectId=${selectedSubject}`).then((res) => {
+      setChapters(res.data.data);
+      const pending = pendingParams.current.chapterId;
+      if (pending && res.data.data.some((c) => c._id === pending)) {
+        setChapterId(pending);
+        pendingParams.current.subjectId = "";
+        pendingParams.current.chapterId = "";
+      }
+    });
   }, [selectedSubject]);
 
   const socket = getLiveSocket();

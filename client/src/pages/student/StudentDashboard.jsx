@@ -1,13 +1,33 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useQuiz } from "../../context/QuizContext";
-import SemesterSelect from "./SemesterSelect";
+import { getSubjects } from "../../api/mockData";
+import apiClient from "../../api/apiClient";
+import StepCard from "../../components/StepCard";
+import Loader from "../../components/Loader";
 import "./Student.css";
 
 export default function StudentDashboard() {
   const { user } = useAuth();
   const { attempts } = useQuiz();
   const navigate = useNavigate();
+
+  const [subjects, setSubjects] = useState([]);
+  const [semesterName, setSemesterName] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.semesterId) return;
+    getSubjects(user.semesterId).then((data) => {
+      setSubjects(data);
+      setLoading(false);
+    });
+    apiClient.get("/semesters").then((res) => {
+      const mine = res.data.data.find((s) => s._id === user.semesterId);
+      if (mine) setSemesterName(mine.name);
+    });
+  }, [user]);
 
   const avgPercent =
     attempts.length > 0
@@ -19,6 +39,20 @@ export default function StudentDashboard() {
     attempts.length > 0
       ? Math.round(Math.max(...attempts.map((a) => (a.correct / a.total) * 100)))
       : null;
+
+  const lastAttempt = attempts[0]; // backend already sorts newest-first
+
+  function continuePractice() {
+    if (!lastAttempt?.chapterId) return;
+    navigate(`/student/${lastAttempt.semesterId}/${lastAttempt.subjectId}/${lastAttempt.chapterId}/quiz`, {
+      state: {
+        chapterName: lastAttempt.chapterName,
+        subjectName: lastAttempt.subjectName,
+        semesterName: lastAttempt.semesterName,
+        practiceMode: true,
+      },
+    });
+  }
 
   return (
     <div className="page container">
@@ -37,7 +71,7 @@ export default function StudentDashboard() {
         </div>
         <div className="page-header-side">
           <span className="badge badge-teal">{user?.role}</span>
-          <span className="badge badge-gold">Sem-wise practice</span>
+          <span className="badge badge-gold">⚡ <span onClick={() => navigate("/student/live")} style={{ cursor: "pointer" }}>Live Quiz</span></span>
         </div>
       </div>
 
@@ -56,10 +90,39 @@ export default function StudentDashboard() {
         </div>
       </div>
 
+      {lastAttempt?.chapterId && (
+        <div className="card" style={{ padding: 20, marginBottom: 32, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 700 }}>Continue where you left off</div>
+            <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>
+              {lastAttempt.subjectName} · {lastAttempt.chapterName} (practice mode, untimed)
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={continuePractice}>Practice Again →</button>
+        </div>
+      )}
+
       <div className="section-eyebrow-row">
-        <span className="eyebrow">Choose your semester</span>
+        <span className="eyebrow">Your subjects{semesterName ? ` — ${semesterName}` : ""}</span>
       </div>
-      <SemesterSelect embedded />
+
+      {loading ? (
+        <Loader label="Loading your subjects..." />
+      ) : subjects.length === 0 ? (
+        <div className="empty-state card">No subjects available for your semester yet. Check back once your faculty adds one.</div>
+      ) : (
+        <div className="grid-cards">
+          {subjects.map((sub) => (
+            <StepCard
+              key={sub.id}
+              title={sub.name}
+              subtitle="Tap to view chapters"
+              icon={sub.name[0]}
+              onClick={() => navigate(`/student/${user.semesterId}/${sub.id}/chapters`)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

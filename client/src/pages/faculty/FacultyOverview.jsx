@@ -85,9 +85,16 @@ export default function FacultyOverview() {
       <div className="faculty-panel card">
         <div className="panel-header">
           <h3>Quick Actions</h3>
-          <span className="badge badge-accent">3 shortcuts</span>
+          <span className="badge badge-accent">4 shortcuts</span>
         </div>
         <div className="manage-list">
+          <div className="manage-row">
+            <div>
+              <div className="manage-row-text">🌳 Browse Content Tree</div>
+              <div className="manage-row-sub">See everything at a glance — jump straight to a chapter's questions or host it live</div>
+            </div>
+            <button className="btn btn-primary" onClick={() => navigate("/faculty/content")}>Go →</button>
+          </div>
           <div className="manage-row">
             <div>
               <div className="manage-row-text">Add a new Semester</div>

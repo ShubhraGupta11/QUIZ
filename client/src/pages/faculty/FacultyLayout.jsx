@@ -4,6 +4,7 @@ import "./Faculty.css";
 
 const links = [
   { to: "/faculty/dashboard", label: "Overview", icon: "📊" },
+  { to: "/faculty/content", label: "Content Tree", icon: "🌳" },
   { to: "/faculty/semesters", label: "Semesters", icon: "🗂" },
   { to: "/faculty/subjects", label: "Subjects", icon: "📘" },
   { to: "/faculty/chapters", label: "Chapters", icon: "📑" },

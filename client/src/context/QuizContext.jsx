@@ -17,6 +17,9 @@ export function QuizProvider({ children }) {
       const response = await apiClient.get('/attempts/me');
       const mapped = response.data.data.map((att) => ({
         id: att._id,
+        chapterId: att.chapterId?._id,
+        subjectId: att.chapterId?.subjectId?._id,
+        semesterId: att.chapterId?.subjectId?.semesterId?._id,
         chapterName: att.chapterId?.name || "Deleted Chapter",
         subjectName: att.chapterId?.subjectId?.name || "Deleted Subject",
         semesterName: att.chapterId?.subjectId?.semesterId?.name || "Deleted Semester",
