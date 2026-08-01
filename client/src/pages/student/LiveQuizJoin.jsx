@@ -232,8 +232,11 @@ export default function LiveQuizJoin() {
       {phase === "reveal" && currentQuestion && revealData && (
         <div className="card" style={{ padding: 32 }}>
           <div className={`lq-reveal-banner ${lastResult?.isCorrect ? "correct" : "incorrect"}`}>
-            Correct Answer: {currentQuestion.options[revealData.correctOptionIndex]}
+            {lastResult?.isCorrect ? "✅ You were correct!" : "❌ You were incorrect."}
           </div>
+          <p style={{ textAlign: "center", fontSize: 14, marginTop: -8, marginBottom: 12 }}>
+            The correct answer was: <strong>{currentQuestion.options[revealData.correctOptionIndex]}</strong>
+          </p>
           <p style={{ textAlign: "center", color: "var(--ink-muted)" }}>Waiting for the host to continue...</p>
         </div>
       )}
