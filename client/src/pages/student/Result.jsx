@@ -54,11 +54,25 @@ export default function Result() {
         id: `${Date.now()}-${i}`,
         questionText: r.questionText,
         correctAnswer: r.options[r.correctIndex],
+        options: r.options,
+        correctIndex: r.correctIndex,
         chapterName: data.chapterName,
       }));
     addFlashcards(user?._id, wrongCards);
     setFlashcardsSaved(true);
   }
+
+  // Mistake pattern insight: which option letter (A/B/C/D) the student picked
+  // most often when wrong, so they can notice a habit (e.g. always guessing "C").
+  const mistakePattern = (() => {
+    const wrongPicks = data.review.filter((r) => !r.isCorrect && r.selected !== undefined && r.selected !== null);
+    if (wrongPicks.length < 2) return null;
+    const counts = {};
+    wrongPicks.forEach((r) => { counts[r.selected] = (counts[r.selected] || 0) + 1; });
+    const [topIndex, topCount] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    if (topCount < 2) return null;
+    return { letter: String.fromCharCode(65 + Number(topIndex)), count: topCount, total: wrongPicks.length };
+  })();
 
   async function challengeFriend() {
     if (!data.semesterId || !data.subjectId || !data.chapterId) {
@@ -102,7 +116,20 @@ export default function Result() {
           <p>
             {data.semesterName} · {data.subjectName} · {data.chapterName}
             {data.practiceMode && " · Practice Mode (not saved to history)"}
+            {data.negativeMarking && " · Negative marking was ON"}
           </p>
+
+          {data.negativeMarking && data.scoreMarks !== undefined && (
+            <div style={{ marginTop: 10, fontSize: 13, color: "var(--ink-muted)" }}>
+              Final score after negative marking: <strong>{data.scoreMarks}/{data.totalMarks} marks</strong>
+            </div>
+          )}
+
+          {mistakePattern && (
+            <div style={{ marginTop: 14, fontSize: 13, color: "var(--ink-muted)" }}>
+              🔍 Mistake pattern: you picked option <strong>{mistakePattern.letter}</strong> in {mistakePattern.count} of your {mistakePattern.total} wrong answers — worth double-checking that habit.
+            </div>
+          )}
 
           {data.beatTarget !== undefined && data.beatTarget !== null && (
             <div
@@ -172,6 +199,14 @@ export default function Result() {
             {!data.practiceMode && (
               <button className="btn btn-outline no-print" onClick={challengeFriend}>
                 🤜🤛 Challenge a Friend
+              </button>
+            )}
+            {percent >= 90 && (
+              <button
+                className="btn btn-outline no-print"
+                onClick={() => navigate("/student/certificate", { state: { ...data, percent } })}
+              >
+                🏆 Claim Certificate
               </button>
             )}
           </div>

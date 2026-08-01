@@ -37,6 +37,7 @@ app.use('/api/stats', require('./routes/stats'));
 app.use('/api/departments', require('./routes/departments'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/doubts', require('./routes/doubts'));
+app.use('/api/groups', require('./routes/groups'));
 
 // Global Error Handler
 app.use((err, req, res, next) => {

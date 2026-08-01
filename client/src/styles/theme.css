@@ -338,3 +338,17 @@ ul {
     display: none !important;
   }
 }
+
+/* Accessibility: larger text mode */
+:root[data-font-size="large"] {
+  font-size: 118%;
+}
+
+/* Accessibility: reading-friendly font (more open letterforms than the default display font) */
+:root[data-reading-font="true"] body,
+:root[data-reading-font="true"] .question-card,
+:root[data-reading-font="true"] .review-item,
+:root[data-reading-font="true"] .chart-card {
+  font-family: Verdana, Tahoma, "Trebuchet MS", sans-serif;
+  letter-spacing: 0.01em;
+}

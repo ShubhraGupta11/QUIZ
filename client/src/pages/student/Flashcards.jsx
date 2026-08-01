@@ -1,16 +1,39 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { getFlashcards, removeFlashcard } from "../../utils/flashcards";
+import { getFlashcards, getRevisableFlashcards, removeFlashcard } from "../../utils/flashcards";
 import BackButton from "../../components/BackButton";
 import "./Student.css";
 
 export default function Flashcards() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [cards, setCards] = useState(() => getFlashcards(user?._id));
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
   const card = cards[index];
+  const revisable = getRevisableFlashcards(user?._id);
+
+  function startRevisionQuiz() {
+    const questions = revisable.map((c) => ({
+      id: c.id,
+      text: c.questionText,
+      options: c.options,
+      correctIndex: c.correctIndex,
+      marks: 2,
+      difficulty: "medium",
+    }));
+    navigate("/student/self-quiz", {
+      state: {
+        selfQuiz: true,
+        questions,
+        chapterName: "Flashcard Revision",
+        subjectName: "Mixed Chapters",
+        semesterName: "Your Saved Mistakes",
+      },
+    });
+  }
 
   function markKnown() {
     removeFlashcard(user?._id, card.id);
@@ -36,6 +59,9 @@ export default function Flashcards() {
         </div>
         <div className="page-header-side">
           <span className="badge badge-teal">{cards.length} card{cards.length === 1 ? "" : "s"}</span>
+          {revisable.length >= 2 && (
+            <button className="btn btn-primary" onClick={startRevisionQuiz}>📝 Start Revision Quiz</button>
+          )}
         </div>
       </div>
 

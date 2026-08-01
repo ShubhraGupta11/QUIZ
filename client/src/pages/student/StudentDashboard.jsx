@@ -43,6 +43,29 @@ export default function StudentDashboard() {
 
   const lastAttempt = attempts[0]; // backend already sorts newest-first
 
+  // Weekly recap: attempts, average score, and XP earned in the last 7 days
+  const weeklyRecap = (() => {
+    const weekAgo = Date.now() - 7 * 86400000;
+    const thisWeek = attempts.filter((a) => new Date(a.date).getTime() >= weekAgo);
+    if (thisWeek.length === 0) return null;
+    const avg = Math.round(thisWeek.reduce((sum, a) => sum + (a.correct / a.total) * 100, 0) / thisWeek.length);
+    const xp = thisWeek.reduce((sum, a) => sum + Math.round((a.correct / a.total) * 100), 0);
+    return { count: thisWeek.length, avg, xp };
+  })();
+
+  // Weekly study goal (target quiz count), stored locally per user
+  const goalKey = user?._id ? `smartquiz_weekly_goal_${user._id}` : null;
+  const [weeklyGoal, setWeeklyGoal] = useState(() => (goalKey ? Number(localStorage.getItem(goalKey)) || 5 : 5));
+  const [editingGoal, setEditingGoal] = useState(false);
+  const goalProgress = weeklyRecap?.count || 0;
+
+  function saveGoal(value) {
+    const target = Math.max(1, Number(value) || 5);
+    setWeeklyGoal(target);
+    if (goalKey) localStorage.setItem(goalKey, String(target));
+    setEditingGoal(false);
+  }
+
   // Spaced repetition: chapters last attempted 7+ days ago, or scored below 60% last time
   const revisionReminders = (() => {
     const byChapter = new Map();
@@ -108,6 +131,54 @@ export default function StudentDashboard() {
         </div>
       </div>
 
+      <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 24, justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>🎯 Weekly Goal</div>
+          {editingGoal ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="number"
+                min={1}
+                defaultValue={weeklyGoal}
+                style={{ width: 70 }}
+                onKeyDown={(e) => e.key === "Enter" && saveGoal(e.target.value)}
+                id="goal-input"
+              />
+              <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => saveGoal(document.getElementById("goal-input").value)}>
+                Save
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>
+              {goalProgress}/{weeklyGoal} quizzes this week{" "}
+              <span style={{ color: "var(--accent-ink)", cursor: "pointer", fontWeight: 600 }} onClick={() => setEditingGoal(true)}>
+                (edit)
+              </span>
+            </div>
+          )}
+          <div style={{ height: 8, borderRadius: 999, background: "var(--paper)", border: "1px solid var(--border-soft)", overflow: "hidden", marginTop: 8, width: 200 }}>
+            <div style={{ height: "100%", width: `${Math.min(100, (goalProgress / weeklyGoal) * 100)}%`, background: "var(--accent)" }} />
+          </div>
+        </div>
+
+        {weeklyRecap && (
+          <div style={{ display: "flex", gap: 20 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{weeklyRecap.count}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>Quizzes this week</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{weeklyRecap.avg}%</div>
+              <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>Avg this week</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>+{weeklyRecap.xp}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>XP this week</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {revisionReminders.length > 0 && (
         <div className="card" style={{ padding: 20, marginBottom: 20 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>⏰ Time to Revise</div>
@@ -138,6 +209,7 @@ export default function StudentDashboard() {
         <button className="btn btn-outline" onClick={() => navigate("/student/flashcards")}>🗂 Flashcards</button>
         <button className="btn btn-outline" onClick={() => navigate("/student/ask-ai")}>✨ Ask AI a Doubt</button>
         <button className="btn btn-outline" onClick={() => navigate("/student/doubts")}>💬 My Doubts</button>
+        <button className="btn btn-outline" onClick={() => navigate("/student/groups")}>👥 Study Groups</button>
       </div>
 
       {lastAttempt?.chapterId && (

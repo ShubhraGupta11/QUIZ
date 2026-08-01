@@ -4,14 +4,27 @@ import { getQuestions } from "../../api/mockData";
 import apiClient from "../../api/apiClient";
 import Loader from "../../components/Loader";
 import BackButton from "../../components/BackButton";
+import { useAuth } from "../../context/AuthContext";
 import "./Student.css";
 
 const TIME_PER_QUESTION = 30; // seconds
+
+function shuffleOptions(question) {
+  const indices = question.options.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  const options = indices.map((i) => question.options[i]);
+  const correctIndex = question.correctIndex !== undefined ? indices.indexOf(question.correctIndex) : undefined;
+  return { ...question, options, correctIndex };
+}
 
 export default function Quiz() {
   const { semesterId, subjectId, chapterId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const meta = location.state || {};
 
@@ -20,9 +33,12 @@ export default function Quiz() {
   const challengedBy = searchParams.get("from") || null;
 
   const practiceMode = !!meta.practiceMode;
+  const negativeMarking = !!meta.negativeMarking;
   // Self-quiz: questions generated on-the-fly from student-uploaded notes.
   // They aren't in the DB, so scoring happens locally and nothing is persisted.
   const isSelfQuiz = !!meta.selfQuiz && Array.isArray(meta.questions);
+  // Saved progress lets a student close mid-quiz and pick up where they left off
+  const progressKey = user?._id && chapterId ? `smartquiz_progress_${user._id}_${chapterId}` : null;
 
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,13 +57,54 @@ export default function Quiz() {
       return;
     }
     getQuestions(chapterId, meta.chapterName).then((data) => {
-      setQuestions(data);
+      const shuffled = data.map(shuffleOptions);
+      setQuestions(shuffled);
       setLoading(false);
+
+      // Offer to resume saved progress for this chapter, if any
+      if (progressKey) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(progressKey) || "null");
+          if (saved && saved.answers && Object.keys(saved.answers).length > 0) {
+            if (window.confirm("You have an unfinished attempt for this chapter. Resume where you left off?")) {
+              setAnswers(saved.answers);
+              setCurrent(Math.min(saved.current || 0, shuffled.length - 1));
+              setBookmarked(saved.bookmarked || {});
+            } else {
+              localStorage.removeItem(progressKey);
+            }
+          }
+        } catch {
+          // ignore corrupt saved progress
+        }
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterId, isSelfQuiz]);
 
+  // Autosave progress as the student answers questions (skipped for self-quiz/practice-only sessions without a real chapter)
+  useEffect(() => {
+    if (!progressKey || isSelfQuiz || loading || questions.length === 0) return;
+    localStorage.setItem(progressKey, JSON.stringify({ answers, current, bookmarked }));
+  }, [progressKey, isSelfQuiz, loading, questions.length, answers, current, bookmarked]);
+
   const question = questions[current];
+
+  // Keyboard shortcuts: 1-4 pick an option, Enter/→ advance
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!question || loading) return;
+      if (["1", "2", "3", "4"].includes(e.key)) {
+        const idx = Number(e.key) - 1;
+        if (idx < question.options.length) selectOption(idx);
+      } else if ((e.key === "Enter" || e.key === "ArrowRight") && answers[question.id] !== undefined) {
+        goNext();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question, answers, loading]);
 
   const goNext = useCallback(() => {
     setTimePerQuestion((prev) => ({
@@ -144,9 +201,11 @@ export default function Quiz() {
         answers: answersArray,
         timeTaken: timeTakenSec,
         practice: practiceMode,
+        negativeMarking,
       });
 
       const { score, total, evaluation } = res.data.data;
+      if (progressKey) localStorage.removeItem(progressKey);
 
       // Map evaluation to the review structure expected by Result.jsx
       const review = evaluation.map((item, i) => ({
@@ -175,6 +234,9 @@ export default function Quiz() {
           practiceMode,
           beatTarget,
           challengedBy,
+          negativeMarking,
+          scoreMarks: score,
+          totalMarks: total,
         },
         replace: true,
       });

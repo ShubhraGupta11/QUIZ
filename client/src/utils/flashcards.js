@@ -20,6 +20,12 @@ export function addFlashcards(userId, cards) {
   localStorage.setItem(storageKey(userId), JSON.stringify(merged));
 }
 
+// Flashcards that carry a full options+correctIndex payload (saved after the
+// options+correctIndex fields were added) can be replayed as a graded mini-quiz.
+export function getRevisableFlashcards(userId) {
+  return getFlashcards(userId).filter((c) => Array.isArray(c.options) && typeof c.correctIndex === "number");
+}
+
 export function removeFlashcard(userId, id) {
   const existing = getFlashcards(userId);
   localStorage.setItem(storageKey(userId), JSON.stringify(existing.filter((c) => c.id !== id)));

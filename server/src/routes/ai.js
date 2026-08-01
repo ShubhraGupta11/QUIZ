@@ -694,4 +694,72 @@ router.post('/chat', protect, async (req, res) => {
   }
 });
 
+/**
+ * @route   POST /api/faculty/chapter-summary
+ * @desc    AI-generated short summary/key-points for a chapter, built from its
+ *          question bank (so it reflects what's actually being tested).
+ * @access  Private (Student or Faculty)
+ */
+router.post('/chapter-summary', protect, async (req, res) => {
+  try {
+    const { chapterId } = req.body;
+    if (!chapterId) {
+      return res.status(400).json({ success: false, message: 'chapterId is required' });
+    }
+
+    const chapter = await Chapter.findById(chapterId);
+    if (!chapter) {
+      return res.status(404).json({ success: false, message: 'Chapter not found' });
+    }
+
+    const questions = await Question.find({ chapterId }).select('text').limit(30);
+    if (questions.length === 0) {
+      return res.status(200).json({
+        success: true,
+        summary: `No questions exist for "${chapter.name}" yet, so a summary can't be generated. Try uploading notes to generate a quiz first.`,
+        fallback: true,
+      });
+    }
+
+    const topicList = questions.map((q) => `- ${q.text}`).join('\n');
+    const prompt = `Based on the following exam questions from the chapter "${chapter.name}", write a short study summary (5-8 bullet points) of the key concepts a student should know. Do not answer the questions — infer the underlying topics and summarize them for revision.
+
+${topicList}
+
+Return plain text bullet points (using "-"), no markdown headers, under 200 words.`;
+
+    let summary = null;
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const result = await model.generateContent(prompt);
+        summary = result.response.text().trim();
+      } catch (err) {
+        console.error('Gemini chapter-summary failed:', err.message);
+      }
+    }
+
+    if (!summary) {
+      try {
+        summary = await generateWithOpenRouter(prompt);
+      } catch (err) {
+        console.error('OpenRouter chapter-summary failed:', err.message);
+      }
+    }
+
+    if (!summary) {
+      summary = `Key topics covered in "${chapter.name}" (based on its question bank):\n` +
+        questions.slice(0, 8).map((q) => `- ${q.text.replace(/\?$/, '')}`).join('\n');
+    }
+
+    res.status(200).json({ success: true, summary, fallback: false });
+  } catch (error) {
+    console.error('Error generating chapter summary:', error);
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+});
+
 module.exports = router;

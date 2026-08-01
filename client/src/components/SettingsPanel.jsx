@@ -7,7 +7,7 @@ import "./SettingsPanel.css";
 
 export default function SettingsPanel() {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, fontSize, toggleFontSize, readingFont, toggleReadingFont } = useTheme();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [avatar, setAvatarState] = useState(() => getAvatar(user?._id));
@@ -49,6 +49,30 @@ export default function SettingsPanel() {
               className={`settings-switch ${theme === "dark" ? "on" : ""}`}
               onClick={toggleTheme}
               aria-label="Toggle dark mode"
+            >
+              <span className="settings-switch-knob" />
+            </button>
+          </div>
+
+          <div className="settings-menu-row">
+            <span>Larger text</span>
+            <button
+              type="button"
+              className={`settings-switch ${fontSize === "large" ? "on" : ""}`}
+              onClick={toggleFontSize}
+              aria-label="Toggle larger text"
+            >
+              <span className="settings-switch-knob" />
+            </button>
+          </div>
+
+          <div className="settings-menu-row">
+            <span>Reading-friendly font</span>
+            <button
+              type="button"
+              className={`settings-switch ${readingFont ? "on" : ""}`}
+              onClick={toggleReadingFont}
+              aria-label="Toggle reading-friendly font"
             >
               <span className="settings-switch-knob" />
             </button>

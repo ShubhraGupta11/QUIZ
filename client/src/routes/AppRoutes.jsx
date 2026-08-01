@@ -25,6 +25,8 @@ const GenerateQuiz = lazy(() => import("../pages/student/GenerateQuiz"));
 const Flashcards = lazy(() => import("../pages/student/Flashcards"));
 const DoubtChat = lazy(() => import("../pages/student/DoubtChat"));
 const MyDoubts = lazy(() => import("../pages/student/MyDoubts"));
+const StudyGroups = lazy(() => import("../pages/student/StudyGroups"));
+const Certificate = lazy(() => import("../pages/student/Certificate"));
 
 const FacultyLayout = lazy(() => import("../pages/faculty/FacultyLayout"));
 const FacultyOverview = lazy(() => import("../pages/faculty/FacultyOverview"));
@@ -115,6 +117,14 @@ export default function AppRoutes() {
           <Route
             path="/student/doubts"
             element={<ProtectedRoute role="student"><MyDoubts /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/groups"
+            element={<ProtectedRoute role="student"><StudyGroups /></ProtectedRoute>}
+          />
+          <Route
+            path="/student/certificate"
+            element={<ProtectedRoute role="student"><Certificate /></ProtectedRoute>}
           />
           {/* Public QR-scan join — no login required, guests join by name only */}
           <Route path="/join/:code" element={<LiveQuizJoin />} />

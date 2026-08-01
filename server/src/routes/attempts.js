@@ -14,7 +14,7 @@ const { protect, checkRole } = require('../middleware/auth');
  */
 router.post('/', protect, checkRole('student'), async (req, res) => {
   try {
-    const { chapterId, answers, timeTaken, practice } = req.body;
+    const { chapterId, answers, timeTaken, practice, negativeMarking } = req.body;
 
     if (!chapterId || !answers || timeTaken === undefined) {
       return res.status(400).json({ success: false, message: 'Please provide chapterId, answers array, and timeTaken' });
@@ -41,14 +41,18 @@ router.post('/', protect, checkRole('student'), async (req, res) => {
     let totalMarks = 0;
     const evaluation = [];
 
-    // Evaluate answers
+    // Evaluate answers. With negative marking on, each wrong (but attempted) answer
+    // deducts 1 mark — unanswered questions are never penalized.
     questions.forEach((question, index) => {
       const studentAnswer = answers[index];
+      const wasAnswered = studentAnswer !== undefined && studentAnswer !== null;
       const isCorrect = studentAnswer === question.correctOptionIndex;
       const questionMarks = question.marks || 2;
-      
+
       if (isCorrect) {
         score += questionMarks;
+      } else if (negativeMarking && wasAnswered) {
+        score -= 1;
       }
       totalMarks += questionMarks;
 
@@ -62,6 +66,8 @@ router.post('/', protect, checkRole('student'), async (req, res) => {
         marks: questionMarks,
       });
     });
+
+    score = Math.max(0, score);
 
     // In practice mode, skip persisting the attempt so it doesn't affect history/leaderboards
     let attempt = null;
