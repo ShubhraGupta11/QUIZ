@@ -15,27 +15,8 @@ export default function FacultyOverview() {
 
     async function loadCounts() {
       try {
-        const subjectsRes = await apiClient.get("/subjects");
-        const subjects = subjectsRes.data.data;
-
-        const distinctSemesters = new Set(
-          subjects.map((s) => s.semesterId?._id || s.semesterId).filter(Boolean)
-        );
-
-        const chaptersPerSubject = await Promise.all(
-          subjects.map((s) => apiClient.get(`/chapters?subjectId=${s._id}`))
-        );
-        const chapters = chaptersPerSubject.flatMap((res) => res.data.data);
-        const questionTotal = chapters.reduce((sum, ch) => sum + (ch.questionCount || 0), 0);
-
-        if (!cancelled) {
-          setCounts({
-            semesters: distinctSemesters.size,
-            subjects: subjects.length,
-            chapters: chapters.length,
-            questions: questionTotal,
-          });
-        }
+        const res = await apiClient.get("/stats/faculty-overview");
+        if (!cancelled) setCounts(res.data.data);
       } catch (err) {
         console.error("Error loading faculty overview counts:", err);
       } finally {

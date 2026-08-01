@@ -28,7 +28,7 @@ router.get('/', protect, async (req, res) => {
       }
     }
 
-    const subjects = await Subject.find(filter).populate('semesterId', 'name');
+    const subjects = await Subject.find(filter).populate('semesterId', 'name').lean();
     res.status(200).json({ success: true, data: subjects });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });

@@ -106,7 +106,7 @@ router.get('/', protect, async (req, res) => {
       query = query.select('-correctOptionIndex');
     }
 
-    const questions = await query;
+    const questions = await query.lean();
     res.status(200).json({ success: true, data: questions });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });

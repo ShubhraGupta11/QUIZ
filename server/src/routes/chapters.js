@@ -18,7 +18,7 @@ router.get('/', protect, async (req, res) => {
 
       // Students may only browse chapters of a subject in their own department/semester
       if (req.user.role === 'student') {
-        const subject = await Subject.findById(req.query.subjectId);
+        const subject = await Subject.findById(req.query.subjectId).lean();
         if (
           !subject ||
           subject.department !== req.user.department ||
@@ -28,7 +28,7 @@ router.get('/', protect, async (req, res) => {
         }
       }
     }
-    const chapters = await Chapter.find(filter).populate('subjectId', 'name');
+    const chapters = await Chapter.find(filter).populate('subjectId', 'name').lean();
 
     // Attach the real question count for each chapter
     const counts = await Question.aggregate([
@@ -37,7 +37,7 @@ router.get('/', protect, async (req, res) => {
     ]);
     const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
     const chaptersWithCounts = chapters.map((c) => ({
-      ...c.toObject(),
+      ...c,
       questionCount: countMap.get(String(c._id)) || 0,
     }));
 

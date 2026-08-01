@@ -5,22 +5,6 @@ const { protect, checkRole } = require('../middleware/auth');
 
 const DEFAULT_SEMESTER_NAMES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th'];
 
-// A department may be missing some (or all) of the standard 1st-7th semesters,
-// e.g. if faculty only manually created one so far. Top up whichever of the
-// standard names are missing (without touching ones that already exist), so
-// students always see the full semester list at registration regardless of
-// how much faculty has set up in that department.
-async function ensureDefaultSemesters(department) {
-  const existing = await Semester.find({ department }).select('name');
-  const existingNames = new Set(existing.map((s) => s.name));
-  const missing = DEFAULT_SEMESTER_NAMES.filter((name) => !existingNames.has(name));
-  if (missing.length === 0) return;
-
-  await Semester.insertMany(
-    missing.map((name) => ({ name, order: DEFAULT_SEMESTER_NAMES.indexOf(name) + 1, department }))
-  );
-}
-
 /**
  * @route   GET /api/semesters
  * @desc    Get semesters for a department, ordered by their designated sorting order.
@@ -31,11 +15,10 @@ async function ensureDefaultSemesters(department) {
  */
 router.get('/', async (req, res) => {
   try {
-    const filter = {};
+    let departments;
 
     if (req.query.department) {
-      await ensureDefaultSemesters(req.query.department);
-      filter.department = req.query.department;
+      departments = [req.query.department];
     } else {
       // No department specified: try to scope to the logged-in user, if any
       const token = req.headers.authorization?.startsWith('Bearer')
@@ -46,21 +29,41 @@ router.get('/', async (req, res) => {
           const jwt = require('jsonwebtoken');
           const User = require('../models/User');
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'smartquiz_super_secret_jwt_key_2026');
-          const user = await User.findById(decoded.id);
-          if (user?.role === 'student') {
-            await ensureDefaultSemesters(user.department);
-            filter.department = user.department;
-          } else if (user?.role === 'faculty') {
-            await Promise.all((user.departments || []).map(ensureDefaultSemesters));
-            filter.department = { $in: user.departments || [] };
-          }
+          const user = await User.findById(decoded.id).lean();
+          if (user?.role === 'student') departments = [user.department];
+          else if (user?.role === 'faculty') departments = user.departments || [];
         } catch {
           // Invalid/missing token: fall through with no department filter
         }
       }
     }
 
-    const semesters = await Semester.find(filter).sort({ order: 1 });
+    const filter = departments ? { department: { $in: departments } } : {};
+
+    // Single query in the common case. Only if some standard semesters are
+    // genuinely missing for a department do we pay for one extra insert +
+    // refetch — steady-state traffic (the vast majority of requests) never
+    // touches that path.
+    let semesters = await Semester.find(filter).sort({ order: 1 }).lean();
+
+    if (departments) {
+      const byDept = new Map(departments.map((d) => [d, []]));
+      semesters.forEach((s) => byDept.get(s.department)?.push(s));
+
+      const toInsert = [];
+      for (const [dept, list] of byDept) {
+        const existingNames = new Set(list.map((s) => s.name));
+        DEFAULT_SEMESTER_NAMES.forEach((name, i) => {
+          if (!existingNames.has(name)) toInsert.push({ name, order: i + 1, department: dept });
+        });
+      }
+
+      if (toInsert.length > 0) {
+        await Semester.insertMany(toInsert);
+        semesters = await Semester.find(filter).sort({ order: 1 }).lean();
+      }
+    }
+
     res.status(200).json({ success: true, data: semesters });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error: ' + error.message });

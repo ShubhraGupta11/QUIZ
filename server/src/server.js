@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const compression = require('compression');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
@@ -16,6 +17,7 @@ const app = express();
 
 // Standard middleware
 app.use(cors());
+app.use(compression()); // gzip JSON responses — meaningfully cuts transfer time for larger payloads (e.g. 100 generated questions)
 app.use(express.json());
 
 // Main entry welcome route
@@ -31,6 +33,7 @@ app.use('/api/chapters', require('./routes/chapters'));
 app.use('/api/questions', require('./routes/questions'));
 app.use('/api/attempts', require('./routes/attempts'));
 app.use('/api/faculty', require('./routes/ai')); // mount AI generation at /api/faculty
+app.use('/api/stats', require('./routes/stats'));
 
 // Global Error Handler
 app.use((err, req, res, next) => {
