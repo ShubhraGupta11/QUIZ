@@ -7,7 +7,13 @@ import BackButton from "../../components/BackButton";
 import { useAuth } from "../../context/AuthContext";
 import "./Student.css";
 
-const TIME_PER_QUESTION = 30; // seconds
+const TIME_PER_QUESTION = 30; // seconds — used to compute the whole quiz's total time budget
+
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 function shuffleOptions(question) {
   const indices = question.options.map((_, i) => i);
@@ -45,7 +51,8 @@ export default function Quiz() {
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState({});
   const [bookmarked, setBookmarked] = useState({});
-  const [timeLeft, setTimeLeft] = useState(TIME_PER_QUESTION);
+  // One countdown for the whole quiz (all questions combined), not per question
+  const [totalTimeLeft, setTotalTimeLeft] = useState(null);
   const [startedAt] = useState(Date.now());
   const [questionStartedAt, setQuestionStartedAt] = useState(Date.now());
   const [timePerQuestion, setTimePerQuestion] = useState({});
@@ -53,12 +60,14 @@ export default function Quiz() {
   useEffect(() => {
     if (isSelfQuiz) {
       setQuestions(meta.questions);
+      setTotalTimeLeft(meta.questions.length * TIME_PER_QUESTION);
       setLoading(false);
       return;
     }
     getQuestions(chapterId, meta.chapterName).then((data) => {
       const shuffled = data.map(shuffleOptions);
       setQuestions(shuffled);
+      setTotalTimeLeft(shuffled.length * TIME_PER_QUESTION);
       setLoading(false);
 
       // Offer to resume saved progress for this chapter, if any
@@ -111,7 +120,6 @@ export default function Quiz() {
       ...prev,
       [current]: Math.round((Date.now() - questionStartedAt) / 1000),
     }));
-    setTimeLeft(TIME_PER_QUESTION);
     setQuestionStartedAt(Date.now());
     if (current < questions.length - 1) {
       setCurrent((c) => c + 1);
@@ -121,15 +129,18 @@ export default function Quiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, questions, questionStartedAt]);
 
+  // Single countdown covering the entire quiz — keeps running across questions
+  // and auto-submits the whole attempt once it hits zero.
   useEffect(() => {
-    if (loading || questions.length === 0 || practiceMode) return;
-    if (timeLeft <= 0) {
-      goNext();
+    if (loading || questions.length === 0 || practiceMode || totalTimeLeft === null) return;
+    if (totalTimeLeft <= 0) {
+      finishQuiz();
       return;
     }
-    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    const t = setTimeout(() => setTotalTimeLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [timeLeft, loading, questions.length, goNext, practiceMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalTimeLeft, loading, questions.length, practiceMode]);
 
   function selectOption(index) {
     setAnswers((prev) => ({ ...prev, [question.id]: index }));
@@ -282,8 +293,8 @@ export default function Quiz() {
           {practiceMode ? (
             <div className="quiz-timer">Untimed</div>
           ) : (
-            <div className={`quiz-timer ${timeLeft <= 10 ? "danger" : ""}`}>
-              ⏱ {timeLeft}s
+            <div className={`quiz-timer ${totalTimeLeft <= 30 ? "danger" : ""}`}>
+              ⏱ {formatTime(totalTimeLeft)}
             </div>
           )}
         </div>
