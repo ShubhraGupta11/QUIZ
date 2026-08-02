@@ -268,6 +268,67 @@ router.post('/', protect, checkRole('faculty'), async (req, res) => {
 });
 
 /**
+ * @route   POST /api/questions/bulk-save
+ * @desc    Persist a reviewed batch of questions (e.g. from the AI generator preview)
+ *          into the question bank for a chapter. Skips any that duplicate/near-duplicate
+ *          questions already in that chapter, so a faculty can safely re-upload after edits.
+ * @access  Private (Faculty only)
+ */
+router.post('/bulk-save', protect, checkRole('faculty'), async (req, res) => {
+  try {
+    const { chapterId, questions } = req.body;
+    if (!chapterId || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ success: false, message: 'chapterId and a non-empty questions array are required' });
+    }
+
+    const existingQuestions = await Question.find({ chapterId }).select('text');
+    const existingTexts = existingQuestions.map((q) => q.text);
+
+    const toInsert = [];
+    const skipped = [];
+
+    for (const q of questions) {
+      const text = (q.text || '').trim();
+      const options = Array.isArray(q.options) ? q.options.filter((o) => (o || '').trim()) : [];
+      const correctOptionIndex = Number(q.correctOptionIndex);
+
+      if (!text || options.length < 2 || Number.isNaN(correctOptionIndex)) {
+        skipped.push({ text: text || '(empty)', reason: 'Missing text/options/correct answer' });
+        continue;
+      }
+
+      const isDuplicate = existingTexts.some((t) => similarity(t, text) >= 0.85)
+        || toInsert.some((t) => similarity(t.text, text) >= 0.85);
+      if (isDuplicate) {
+        skipped.push({ text, reason: 'Duplicate of an existing question' });
+        continue;
+      }
+
+      toInsert.push({
+        chapterId,
+        text,
+        options,
+        correctOptionIndex,
+        marks: q.marks || 2,
+        difficulty: q.difficulty || 'medium',
+      });
+    }
+
+    const saved = toInsert.length > 0 ? await Question.insertMany(toInsert) : [];
+
+    res.status(201).json({
+      success: true,
+      message: `Uploaded ${saved.length} question(s) to the question bank.${skipped.length ? ` ${skipped.length} skipped.` : ''}`,
+      count: saved.length,
+      skipped,
+      questions: saved,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+  }
+});
+
+/**
  * @route   DELETE /api/questions/:id
  * @desc    Delete a question
  * @access  Private (Faculty only)

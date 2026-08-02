@@ -204,10 +204,16 @@ router.post(
       const geminiKey = process.env.GEMINI_API_KEY;
       const genAI = geminiKey ? new GoogleGenerativeAI(geminiKey) : null;
       const geminiModel = genAI ? genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }) : null;
-      let generatedQuestions = [];
 
-      // Split into batches of at most 25 to prevent token limits/truncation and timeouts.
-      const MAX_BATCH = 25;
+      // Fetch already-existing questions in this chapter so new questions don't repeat them.
+      const existingQuestions = await Question.find({ chapterId: chapter._id }).select('text').limit(300);
+      const seenTexts = new Set(existingQuestions.map((q) => normalizeText(q.text)));
+      const existingTextsForPrompt = existingQuestions.slice(0, 40).map((q) => q.text);
+
+      // Split into batches of at most 20 (smaller batches = faster individual responses,
+      // and running them in PARALLEL below, instead of sequentially, is what actually
+      // makes bulk generation fast).
+      const MAX_BATCH = 20;
       const batchSizes = [];
       let remaining = requestedCount;
       while (remaining > 0) {
@@ -221,17 +227,17 @@ router.post(
         return cycle[i % cycle.length];
       });
 
-      console.log(`Starting AI generation for chapter: "${chapterName}" (${requestedCount} questions) in ${batchSizes.length} batch(es)...`);
+      console.log(`Starting AI generation for chapter: "${chapterName}" (${requestedCount} questions) in ${batchSizes.length} parallel batch(es)...`);
 
-      for (let b = 0; b < batchSizes.length; b++) {
-        const batchSize = batchSizes[b];
-        const batchDiff = difficulties[b];
-
-        const prompt = `You are an expert college professor and academic examiner.
+      function buildPrompt(batchSize, batchDiff, avoidList) {
+        return `You are an expert college professor and academic examiner.
 Generate exactly ${batchSize} high-quality Multiple Choice Questions (MCQs) for the chapter "${chapterName}" under the subject "${subjectName}" for students of "${semesterName}".
 The difficulty of this batch of questions must be: ${batchDiff.toUpperCase()}.
 
-${docContext ? `IMPORTANT: The following is the exact reference material uploaded by the instructor. You MUST base every question strictly and only on facts, definitions, examples, and concepts explicitly present in this text. Do NOT introduce outside knowledge, do NOT make up details not present in the text, and do NOT ask about anything the text does not cover. Every correct answer must be directly verifiable from this text.\n\n---START REFERENCE TEXT---\n${docContext}\n---END REFERENCE TEXT---\n\n` : ''}
+${docContext ? `IMPORTANT: The following is the exact reference material uploaded by the instructor. You MUST read and understand this material first, and base every question strictly and only on facts, definitions, examples, and concepts explicitly present in this text. Spread your questions across DIFFERENT sections/paragraphs of the text below so they cover the whole document, not just the beginning. Do NOT introduce outside knowledge, do NOT make up details not present in the text, and do NOT ask about anything the text does not cover. Every correct answer must be directly verifiable from this text.\n\n---START REFERENCE TEXT---\n${docContext}\n---END REFERENCE TEXT---\n\n` : `Base the questions on standard, factually correct academic knowledge of "${chapterName}" as taught under "${subjectName}" for "${semesterName}".\n\n`}
+${avoidList && avoidList.length ? `Do NOT repeat, rephrase, or duplicate any of these already-existing questions:\n${avoidList.map((t) => `- ${t}`).join('\n')}\n\n` : ''}
+Vary the phrasing and question style (definitions, application, comparison, cause-effect, scenario-based) so consecutive questions never look alike.
+
 Each question must contain:
 1. "text": The question string.
 2. "options": An array of exactly 4 strings.
@@ -249,52 +255,79 @@ Return the output as a strict raw JSON array of objects without any markdown for
     "difficulty": "${batchDiff}"
   }
 ]`;
+      }
 
-        try {
+      const BATCH_TIMEOUT_MS = 25000;
+
+      async function runBatch(batchSize, batchDiff, batchIndex) {
+        const prompt = buildPrompt(batchSize, batchDiff, existingTextsForPrompt);
+
+        const callAI = async () => {
           let cleanJson = null;
-
           if (geminiModel) {
             const result = await geminiModel.generateContent(prompt);
             cleanJson = result.response.text().trim();
-            if (cleanJson.startsWith('```')) {
-              cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
-            }
           } else {
             cleanJson = await generateWithOpenRouter(prompt);
           }
-
-          if (!cleanJson) {
-            throw new Error('No AI provider configured (set GEMINI_API_KEY or OPENROUTER_API_KEY)');
+          if (!cleanJson) throw new Error('No AI provider configured (set GEMINI_API_KEY or OPENROUTER_API_KEY)');
+          if (cleanJson.startsWith('```')) {
+            cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
           }
+          const parsed = JSON.parse(cleanJson);
+          if (!Array.isArray(parsed)) throw new Error('Response is not a JSON array');
+          return parsed;
+        };
 
-          const parsedBatch = JSON.parse(cleanJson);
-          if (Array.isArray(parsedBatch)) {
-            generatedQuestions = generatedQuestions.concat(parsedBatch);
-            console.log(`Successfully generated batch ${b + 1}/${batchSizes.length} (${parsedBatch.length} questions) via ${geminiModel ? 'Gemini' : 'OpenRouter'}`);
-          } else {
-            throw new Error('Response is not a JSON array');
-          }
-        } catch (batchError) {
-          console.error(`Error generating batch ${b + 1}/${batchSizes.length}:`, batchError.message);
-          // Generate mock questions for this batch to ensure we still complete the request
-          const fallbackBatch = generateMockQuestions(chapterName, batchSize, batchDiff);
-          generatedQuestions = generatedQuestions.concat(fallbackBatch);
-          console.log(`Used fallback for batch ${b + 1}/${batchSizes.length} (${fallbackBatch.length} questions)`);
+        const result = await withTimeout(callAI, BATCH_TIMEOUT_MS);
+
+        if (result) {
+          console.log(`Batch ${batchIndex + 1}/${batchSizes.length}: generated ${result.length} questions via ${geminiModel ? 'Gemini' : 'OpenRouter'}`);
+          return result;
         }
+
+        // AI failed or timed out for this batch — fall back to content-grounded
+        // questions built directly from the uploaded document (if any) rather than
+        // generic templates, so the fallback still reflects what was uploaded.
+        console.log(`Batch ${batchIndex + 1}/${batchSizes.length}: AI failed/timed out, using fallback`);
+        if (docContext) {
+          const grounded = generateContentGroundedQuestions(docContext, batchSize, batchDiff);
+          if (grounded.length > 0) return grounded;
+        }
+        return generateMockQuestions(chapterName, batchSize, batchDiff);
       }
 
-      // Ensure we truncate or expand to exactly the requested count if there was any drift
+      const batchResults = await Promise.all(
+        batchSizes.map((batchSize, i) => runBatch(batchSize, difficulties[i], i))
+      );
+
+      let generatedQuestions = dedupeQuestions(batchResults.flat(), seenTexts);
+
+      // If duplicates/failures left us short, top up (also deduped) until we hit the count
+      // or we run out of reasonable attempts.
+      let topUpAttempts = 0;
+      while (generatedQuestions.length < requestedCount && topUpAttempts < 3) {
+        const stillNeeded = requestedCount - generatedQuestions.length;
+        const topUpDiff = difficulty === 'mixed' ? 'medium' : difficulty;
+        const topUp = docContext
+          ? generateContentGroundedQuestions(docContext, stillNeeded * 2, topUpDiff)
+          : generateMockQuestions(chapterName, stillNeeded * 2, topUpDiff);
+        const deduped = dedupeQuestions(topUp, seenTexts);
+        generatedQuestions = generatedQuestions.concat(deduped);
+        topUpAttempts += 1;
+        if (deduped.length === 0) break; // can't generate more unique content, stop trying
+      }
+
+      // Ensure we truncate to exactly the requested count if there was any drift
       if (generatedQuestions.length > requestedCount) {
         generatedQuestions = generatedQuestions.slice(0, requestedCount);
-      } else if (generatedQuestions.length < requestedCount) {
-        const diffNeeded = requestedCount - generatedQuestions.length;
-        const padQuestions = generateMockQuestions(chapterName, diffNeeded, difficulty);
-        generatedQuestions = generatedQuestions.concat(padQuestions);
       }
 
-      // Inject chapterId into every question and save to Database
-      const questionsToSave = generatedQuestions.map((q) => ({
-        chapterId: chapter._id,
+      // Normalize shape and attach a temporary client-side id — NOTHING is saved to the
+      // database here. Generation only produces a preview; the faculty reviews it and
+      // explicitly chooses which questions to upload via POST /api/questions/bulk-save.
+      const previewQuestions = generatedQuestions.map((q, i) => ({
+        tempId: `gen-${Date.now()}-${i}`,
         text: q.text,
         options: q.options && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
         correctOptionIndex: typeof q.correctOptionIndex === 'number' && q.correctOptionIndex >= 0 && q.correctOptionIndex <= 3 ? q.correctOptionIndex : 0,
@@ -302,14 +335,11 @@ Return the output as a strict raw JSON array of objects without any markdown for
         difficulty: q.difficulty || 'medium',
       }));
 
-      // Insert the generated questions into MongoDB
-      const savedQuestions = await Question.insertMany(questionsToSave);
-
       return res.status(200).json({
         success: true,
-        message: `Successfully generated and saved ${savedQuestions.length} MCQs automatically into the database for chapter "${chapterName}".`,
-        count: savedQuestions.length,
-        questions: savedQuestions.slice(0, 5), // Return first 5 as a sample preview
+        message: `Generated ${previewQuestions.length} MCQs for chapter "${chapterName}". Review them and choose which to upload.`,
+        count: previewQuestions.length,
+        questions: previewQuestions,
       });
 
     } catch (error) {
@@ -346,9 +376,14 @@ router.post('/generate-single', protect, checkRole('faculty'), async (req, res) 
       : 'General Semester';
     const geminiKey = process.env.GEMINI_API_KEY;
 
+    // Avoid regenerating a question that already exists in this chapter.
+    const existingQuestions = await Question.find({ chapterId: chapter._id }).select('text').limit(300);
+    const seenTexts = new Set(existingQuestions.map((q) => normalizeText(q.text)));
+    const existingTextsForPrompt = existingQuestions.slice(0, 40).map((q) => q.text);
+
     const prompt = `Generate exactly 1 high-quality Multiple Choice Question for the chapter "${chapterName}" under subject "${subjectName}" for students of "${semesterName}".
 Difficulty: ${difficulty}.
-Return strict raw JSON (no markdown) matching:
+${existingTextsForPrompt.length ? `Do NOT repeat or rephrase any of these already-existing questions:\n${existingTextsForPrompt.map((t) => `- ${t}`).join('\n')}\n\n` : ''}Return strict raw JSON (no markdown) matching:
 {"text": "...", "options": ["A","B","C","D"], "correctOptionIndex": 0, "marks": 2, "difficulty": "${difficulty}"}`;
 
     let question;
@@ -357,19 +392,24 @@ Return strict raw JSON (no markdown) matching:
       if (geminiKey) {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-        const result = await model.generateContent(prompt);
-        cleanJson = result.response.text().trim();
-        if (cleanJson.startsWith('```')) {
+        const result = await withTimeout(() => model.generateContent(prompt).then((r) => r.response.text().trim()), 20000);
+        cleanJson = result;
+        if (cleanJson && cleanJson.startsWith('```')) {
           cleanJson = cleanJson.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
         }
       } else {
-        cleanJson = await generateWithOpenRouter(prompt);
+        cleanJson = await withTimeout(() => generateWithOpenRouter(prompt), 20000);
       }
-      if (!cleanJson) throw new Error('No AI provider configured');
+      if (!cleanJson) throw new Error('No AI provider configured or request timed out');
       question = JSON.parse(cleanJson);
+      if (seenTexts.has(normalizeText(question.text))) {
+        throw new Error('AI returned a duplicate question, using fallback instead');
+      }
     } catch (err) {
       console.error('Single question AI generation failed, using fallback:', err.message);
-      question = generateMockQuestions(chapterName, 1, difficulty)[0];
+      // Try a few mock candidates until we find one not already in the chapter
+      const candidates = generateMockQuestions(chapterName, 5, difficulty);
+      question = candidates.find((c) => !seenTexts.has(normalizeText(c.text))) || candidates[0];
     }
 
     const saved = await Question.create({
@@ -484,6 +524,44 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+// Normalize question text for duplicate detection (case/punctuation/whitespace-insensitive)
+function normalizeText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Remove questions that duplicate each other or any text already in `seenSet`.
+// Mutates seenSet with every kept question's normalized text.
+function dedupeQuestions(questions, seenSet) {
+  const kept = [];
+  for (const q of questions) {
+    const key = normalizeText(q.text);
+    if (!key || seenSet.has(key)) continue;
+    seenSet.add(key);
+    kept.push(q);
+  }
+  return kept;
+}
+
+// Race a promise against a timeout; on timeout (or rejection) resolve with null
+// instead of throwing, so one slow/stuck AI call can't stall the whole batch set.
+function withTimeout(promiseFactory, ms) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; resolve(null); }
+    }, ms);
+    promiseFactory()
+      .then((val) => { if (!settled) { settled = true; clearTimeout(timer); resolve(val); } })
+      .catch((err) => {
+        if (!settled) { settled = true; clearTimeout(timer); console.error('AI batch call failed:', err.message); resolve(null); }
+      });
+  });
 }
 
 // Content-grounded fallback: builds fill-in-the-blank style MCQs directly from
